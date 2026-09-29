@@ -1,0 +1,135 @@
+:root {
+  --bg: #0f1115;
+  --board-bg: #181b22;
+  --cell-bg: #1e222b;
+  --text: #e6e8ec;
+  --muted: #8a909c;
+  --accent: #3ddc97;
+  --accent-light: #9af5c9;
+  --fruit: #ff5e7a;
+  --cell-size: 24px;
+  --gap: 2px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* ---------- Ekrany ---------- */
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  text-align: center;
+}
+
+.title {
+  margin: 0;
+  font-size: 56px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--accent);
+}
+
+.levels {
+  display: flex;
+  gap: 12px;
+}
+
+.level-button {
+  padding: 12px 28px;
+  border: 2px solid var(--accent);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 18px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.level-button:hover,
+.level-button:focus-visible {
+  background: var(--accent);
+  color: var(--bg);
+  outline: none;
+}
+
+.hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.final-score {
+  margin: 0;
+  font-size: 28px;
+}
+
+/* ---------- Rozgrywka ---------- */
+
+.scoreboard {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.score {
+  font-size: 48px;
+  font-weight: 700;
+}
+
+.level-name {
+  color: var(--muted);
+  font-size: 18px;
+}
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(20, var(--cell-size));
+  grid-template-rows: repeat(20, var(--cell-size));
+  gap: var(--gap);
+  padding: 8px;
+  border-radius: 12px;
+  background: var(--board-bg);
+  box-shadow: 0 0 0 1px #2a2f3a, 0 20px 50px rgba(0, 0, 0, 0.5);
+}
+
+.cell {
+  border-radius: 4px;
+  background: var(--cell-bg);
+}
+
+.cell.snake {
+  border-radius: 6px;
+  background: var(--accent);
+}
+
+.cell.head {
+  border-radius: 7px;
+  background: var(--accent-light);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.cell.fruit {
+  border-radius: 50%;
+  background: var(--fruit);
+}
