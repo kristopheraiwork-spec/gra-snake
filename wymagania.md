@@ -53,10 +53,9 @@ Poniższe zostały rozważone i odrzucone, żeby utrzymać demo proste:
    - wydłuża węża o **1 segment**,
    - zwiększa wynik o **1 punkt**,
    - powoduje pojawienie się nowego owocu w innym losowym wolnym miejscu.
-6. **Gra kończy się**, gdy głowa węża:
-   - wyjdzie poza krawędź planszy (ściany są śmiertelne — brak przechodzenia na drugą stronę), **lub**
-   - wejdzie na komórkę zajmowaną przez własne ciało.
-7. Wynik końcowy = liczba zjedzonych owoców.
+6. **Ściany nie są śmiertelne.** Gdy głowa węża wyjdzie poza krawędź planszy, pojawia się po przeciwnej stronie, w tym samym wierszu lub kolumnie (wyjście prawą krawędzią = wejście lewą, górną = dolną itd.). Wąż nie traci życia ani punktów, ruch trwa nieprzerwanie; ciało podąża tą samą drogą.
+7. **Gra kończy się**, gdy głowa węża wejdzie na komórkę zajmowaną przez własne ciało.
+8. Wynik końcowy = liczba zjedzonych owoców.
 
 ### Przypadki brzegowe
 
@@ -65,7 +64,9 @@ Poniższe zostały rozważone i odrzucone, żeby utrzymać demo proste:
 | Gracz wciska kierunek przeciwny do aktualnego (np. w lewo, gdy wąż idzie w prawo) | Ruch jest **ignorowany** — wąż nie może zawrócić w siebie |
 | Gracz wciska dwa kierunki w czasie jednej klatki (np. w górę, potem w lewo) | Uwzględniany jest tylko pierwszy poprawny kierunek w danej klatce; drugi nie może obrócić węża o 180° |
 | Wąż zajmuje całą planszę (400 komórek) | Gra kończy się ekranem wygranej — nie ma gdzie umieścić owocu |
-| Wąż zjada owoc i w tym samym ruchu uderza w ścianę | Gra się kończy; punkt za owoc jest naliczony |
+| Głowa węża wychodzi poza krawędź planszy | Pojawia się po przeciwnej stronie w tym samym wierszu/kolumnie; gra trwa dalej |
+| Wąż przechodzi przez krawędź i po drugiej stronie stoi jego własne ciało | Gra się kończy — liczy się kolizja z ciałem, nie samo przejście przez krawędź |
+| Owoc leży przy krawędzi i wąż dosięga go przez przejście na drugą stronę | Owoc zostaje zjedzony normalnie — przejście przez krawędź nie zmienia zasad jedzenia |
 | Klawisze strzałek podczas rozgrywki | Nie przewijają strony (domyślne zachowanie przeglądarki jest blokowane) |
 
 ---
@@ -155,7 +156,7 @@ Kod podzielony na wyraźnie oddzielone części, każda z jednym zadaniem:
 1. **Stałe konfiguracyjne** — rozmiar planszy, prędkości poziomów trudności (zebrane na górze pliku, łatwe do zmiany na żywo podczas szkolenia)
 2. **Stan gry** — pozycje segmentów węża, pozycja owocu, aktualny kierunek, wynik, aktualny ekran
 3. **Pętla gry** — `setInterval` z odstępem zależnym od poziomu trudności; jedno wywołanie = jeden ruch węża
-4. **Logika ruchu** — wyliczenie nowej pozycji głowy, wykrycie kolizji, wydłużenie lub skrócenie węża
+4. **Logika ruchu** — wyliczenie nowej pozycji głowy, zawinięcie współrzędnych przy krawędzi planszy (modulo rozmiaru siatki), wykrycie kolizji z ciałem, wydłużenie lub skrócenie węża
 5. **Obsługa klawiatury** — zamiana wciśniętego klawisza na kierunek, z blokadą zawracania
 6. **Renderowanie** — przeniesienie stanu gry na klasy CSS komórek
 7. **Przełączanie ekranów** — start, rozgrywka, koniec gry
@@ -180,7 +181,7 @@ Gra jest gotowa, gdy wszystkie poniższe punkty są spełnione:
 4. Próba zawrócenia o 180° nie kończy gry — ruch jest ignorowany.
 5. Zjedzenie owocu wydłuża węża, zwiększa wynik o 1 i przenosi owoc w nowe losowe miejsce.
 6. Owoc nigdy nie pojawia się na komórce zajętej przez węża.
-7. Uderzenie w ścianę kończy grę i pokazuje ekran końcowy z wynikiem.
+7. Wyjście poza krawędź planszy **nie** kończy gry — wąż pojawia się po przeciwnej stronie i gra toczy się dalej, z zachowanym wynikiem.
 8. Uderzenie we własne ciało kończy grę i pokazuje ekran końcowy z wynikiem.
 9. Przycisk "Zagraj ponownie" pozwala rozpocząć nową grę z wyborem poziomu, bez odświeżania strony.
 10. Wąż na poziomie trudnym porusza się wyraźnie szybciej niż na łatwym.
