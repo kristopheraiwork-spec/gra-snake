@@ -252,6 +252,8 @@ function handleKeydown(event) {
   // W polach tekstowych klawisze należą do pola. Enter w polu nicku startuje grę,
   // Enter w formularzu konta wysyła formularz (obsługuje to przeglądarka).
   if (event.target.tagName === 'INPUT' && (event.target !== nickInput || key !== 'enter')) return;
+  // Enter/spacja na przycisku: przeglądarka sama go „kliknie” (obsługa z klawiatury).
+  if (event.target.tagName === 'BUTTON' && isConfirmKey) return;
 
   if (state.screen === 'play') {
     const direction = KEY_TO_DIRECTION[key];

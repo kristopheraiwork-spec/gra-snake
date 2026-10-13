@@ -90,7 +90,10 @@ async function ensurePlayer(nick) {
       await signInAndSavePlayer(nick);
     } catch (error) {
       if (!isSessionProblem(error)) throw error;
-      // Jedna próba z nową sesją; zwykły błąd sieci nie kasuje tożsamości gracza.
+      // Konta nie zamieniamy po cichu w gościa — gracz zaloguje się ponownie.
+      const session = await currentSession();
+      if (session && !session.user.is_anonymous) throw error;
+      // Gość: jedna próba z nową sesją; zwykły błąd sieci nie kasuje tożsamości gracza.
       await dbClient.auth.signOut();
       await signInAndSavePlayer(nick);
     }
