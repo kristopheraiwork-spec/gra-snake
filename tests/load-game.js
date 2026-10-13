@@ -44,13 +44,23 @@ function loadGame() {
     // logo.js
     startLogoAnimation: () => {},
     stopLogoAnimation: () => {},
+    // effects.js
+    resetEffects: () => {},
+    addSwallow: () => {},
+    advanceSwallows: () => {},
+    swallowIndexes: () => [],
+    faceState: () => ({ blink: false, tongue: false }),
+    playEatEffect: () => {},
+    bumpScore: () => {},
+    playCrashEffect: () => {},
+    clearEffects: () => {},
   };
   const context = vm.createContext({
     document, console, setInterval, clearInterval, setTimeout, clearTimeout, ...dbStubs,
   });
   const code = fs.readFileSync(path.join(__dirname, '..', 'game.js'), 'utf8');
   vm.runInContext(
-    code + '\n;globalThis.__game = { state, resetState, moveSnake, normalizeNick, normalizeLogin, toSavedGame, isValidSavedGame, restoreState };',
+    code + '\n;globalThis.__game = { state, resetState, moveSnake, normalizeNick, normalizeLogin, isFruitAhead, toSavedGame, isValidSavedGame, restoreState };',
     context,
   );
   return context.__game;

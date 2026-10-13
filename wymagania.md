@@ -38,7 +38,7 @@ Poniższe zostały rozważone i odrzucone, żeby utrzymać demo proste:
 |---|---|
 | Bonusowe owoce, przeszkody na planszy | Rozbudowuje logikę kolizji ponad potrzebę demo |
 | Sterowanie dotykowe, tryb mobilny | Szkolenie odbywa się na komputerach |
-| Dźwięki, animacje planszy, efekty cząsteczkowe | Nie wpływają na rozgrywkę (animowana jest tylko ilustracja na ekranie startowym) |
+| Dźwięki | Nie wpływają na rozgrywkę |
 | Tryb wieloosobowy, logowanie mailem, odzyskiwanie hasła | Konto z loginem i hasłem jest opcjonalne; zapomniane hasło resetuje administrator w panelu Supabase |
 | Własny backend (serwer) | Baza działa jako usługa w chmurze (Supabase), gra łączy się z nią bezpośrednio |
 
@@ -132,7 +132,14 @@ Gra ma pięć stanów, przełączanych w obrębie jednej strony (bez przeładowa
 ### 6.5 Odliczanie
 - Przy wznowieniu (z pauzy lub z ekranu startowego) nad planszą pojawia się odliczanie 3‑2‑1, potem wąż rusza
 
-### 6.6 Ranking, zapis gry i konta
+### 6.6 Zabawne animacje rozgrywki
+- **„Mniam!”** — po zjedzeniu jabłka okruszki rozpryskują się, nad głową wyskakuje „+1”, licznik punktów podskakuje, a wybrzuszenie połkniętego jabłka wędruje wzdłuż ciała aż do ogona
+- **Żywe jabłko** — pojawia się z efektem sprężynki i lekko się kołysze
+- **Mimika węża** — pyszczek otwiera się, gdy jabłko jest tuż przed głową; co kilka sekund język wysuwa się na wolne pole przed głową; wąż czasem mruga
+- **Zabawna kolizja** — po zderzeniu wąż na ok. 1 s zamiera: oczy „× ×”, ciało się trzęsie, nad głową krążą gwiazdki; dopiero potem ekran końca gry (w tej chwili klawisze nie działają)
+- Efekty na polach planszy to klasy CSS; efekty jednorazowe żyją na warstwie nad planszą i same znikają; przy ustawieniu „ogranicz ruch” animacje są wyłączone
+
+### 6.7 Ranking, zapis gry i konta
 - Każda zakończona gra trafia do rankingu; ranking pokazuje najlepszy wynik każdego gracza, osobno dla każdego poziomu
 - Jeden zapis przerwanej gry na gracza; zapis automatyczny co 5 s oraz przy pauzie
 - Nowa gra i koniec gry usuwają zapis
@@ -167,6 +174,7 @@ style.css              — cały wygląd
 game.js                — cała logika gry
 db.js                  — komunikacja z bazą Supabase (ranking, zapis gry, konta)
 logo.js                — animacja ilustracji na ekranie startowym
+effects.js             — zabawne animacje rozgrywki (okruszki, „+1”, mimika, kolizja)
 supabase/schema.sql    — struktura bazy: tabele, widok rankingu, reguły RLS
 supabase/konta.sql     — migracja: opcjonalne konta (login + hasło)
 supabase/test-rls.mjs  — test reguł dostępu na prawdziwym projekcie (node supabase/test-rls.mjs)
@@ -232,3 +240,5 @@ Gra jest gotowa, gdy wszystkie poniższe punkty są spełnione:
 20. „Załóż konto” w trakcie gry bez konta tworzy konto z loginem i hasłem; dotychczasowe wyniki zostają i mają w rankingu znak ✓.
 21. Po wylogowaniu i zalogowaniu (także na innym komputerze) gracz widzi swoje wyniki w rankingu i może wznowić zapisaną grę.
 22. Zajęty login, zły login/hasło, za krótkie hasło i login z polskimi znakami dają czytelny komunikat w formularzu.
+23. Zjedzenie jabłka pokazuje okruszki i „+1”, licznik podskakuje, a wybrzuszenie przesuwa się wzdłuż węża; wąż otwiera pyszczek przed jabłkiem.
+24. Po zderzeniu wąż przez ok. 1 s ma oczy „× ×” i gwiazdki nad głową, potem pojawia się ekran końca gry; animacje nie spowalniają gry na poziomie Trudnym.
