@@ -4,6 +4,12 @@
 
 const BOARD_SIZE = 20;
 const INITIAL_LENGTH = 3;
+const NICK_MIN = 3;
+const NICK_MAX = 16;
+const PASSWORD_MIN = 6;
+const LOGIN_PATTERN = /^[a-z0-9_-]{3,16}$/; // login trafia do adresu e-mail, więc tylko ASCII
+const AUTOSAVE_INTERVAL = 5000; // ms między automatycznymi zapisami gry
+const COUNTDOWN_FROM = 3;       // odliczanie przed wznowieniem gry
 
 const LEVELS = {
   easy:   { name: 'Łatwy',  interval: 200 },
@@ -40,6 +46,8 @@ const state = {
 };
 
 let timerId = null;
+let dbQueue = Promise.resolve(); // operacje na bazie wykonywane po kolei
+let boardLevel = 'medium';       // poziom pokazywany w rankingu na ekranie startowym
 
 function resetState(level) {
   state.snake = createInitialSnake();
@@ -162,6 +170,69 @@ function moveSnake(game) {
 }
 
 // =====================================================================
+// 4a. ZAPIS STANU GRY (bez dostępu do DOM)
+// =====================================================================
+
+// Przycięty nick albo null, gdy długość jest poza zakresem.
+function normalizeNick(raw) {
+  if (typeof raw !== 'string') return null;
+  const nick = raw.trim();
+  return nick.length >= NICK_MIN && nick.length <= NICK_MAX ? nick : null;
+}
+
+// Login konta małymi literami albo null, gdy zawiera niedozwolone znaki.
+function normalizeLogin(raw) {
+  if (typeof raw !== 'string') return null;
+  const login = raw.trim().toLowerCase();
+  return LOGIN_PATTERN.test(login) ? login : null;
+}
+
+// Kopia stanu gry w formacie tabeli saved_games.
+function toSavedGame(game) {
+  return {
+    level: game.level,
+    snake: game.snake.map(segment => ({ x: segment.x, y: segment.y })),
+    fruit: { x: game.fruit.x, y: game.fruit.y },
+    direction: game.direction,
+    score: game.score,
+  };
+}
+
+function isValidCell(cell) {
+  return cell !== null && typeof cell === 'object'
+    && Number.isInteger(cell.x) && Number.isInteger(cell.y)
+    && cell.x >= 0 && cell.x < BOARD_SIZE
+    && cell.y >= 0 && cell.y < BOARD_SIZE;
+}
+
+// Zapis z bazy mógł zostać uszkodzony lub zmieniony ręcznie — sprawdzamy wszystko.
+function isValidSavedGame(saved) {
+  if (saved === null || typeof saved !== 'object') return false;
+  if (!Object.hasOwn(LEVELS, saved.level)) return false;
+  if (!Object.hasOwn(DIRECTIONS, saved.direction)) return false;
+
+  const snake = saved.snake;
+  if (!Array.isArray(snake)) return false;
+  if (snake.length < INITIAL_LENGTH || snake.length > BOARD_SIZE * BOARD_SIZE) return false;
+  if (!snake.every(isValidCell)) return false;
+  if (new Set(snake.map(cell => cell.y * BOARD_SIZE + cell.x)).size !== snake.length) return false;
+
+  if (!isValidCell(saved.fruit)) return false;
+  if (snake.some(segment => samePosition(segment, saved.fruit))) return false;
+
+  return saved.score === snake.length - INITIAL_LENGTH;
+}
+
+function restoreState(saved) {
+  state.snake = saved.snake.map(segment => ({ x: segment.x, y: segment.y }));
+  state.fruit = { x: saved.fruit.x, y: saved.fruit.y };
+  state.direction = saved.direction;
+  state.pendingDirection = null;
+  state.score = saved.score;
+  state.level = saved.level;
+}
+
+// =====================================================================
 // 5. OBSŁUGA KLAWIATURY
 // =====================================================================
 
@@ -176,6 +247,13 @@ function changeDirection(newDirection) {
 function handleKeydown(event) {
   const key = event.key.toLowerCase();
   const isConfirmKey = key === 'enter' || key === ' ';
+  const isPauseKey = key === 'p' || key === 'escape';
+
+  // W polach tekstowych klawisze należą do pola. Enter w polu nicku startuje grę,
+  // Enter w formularzu konta wysyła formularz (obsługuje to przeglądarka).
+  if (event.target.tagName === 'INPUT' && (event.target !== nickInput || key !== 'enter')) return;
+  // Enter/spacja na przycisku: przeglądarka sama go „kliknie” (obsługa z klawiatury).
+  if (event.target.tagName === 'BUTTON' && isConfirmKey) return;
 
   if (state.screen === 'play') {
     const direction = KEY_TO_DIRECTION[key];
@@ -184,6 +262,23 @@ function handleKeydown(event) {
     }
     if (direction) {
       changeDirection(direction);
+    } else if (isPauseKey) {
+      pauseGame();
+    }
+    return;
+  }
+
+  if (state.screen === 'countdown') {
+    if (KEY_TO_DIRECTION[key] || isConfirmKey) {
+      event.preventDefault();
+    }
+    return;
+  }
+
+  if (state.screen === 'pause') {
+    if (isConfirmKey || isPauseKey) {
+      event.preventDefault();
+      resumeGame();
     }
     return;
   }
@@ -193,7 +288,7 @@ function handleKeydown(event) {
     if (state.screen === 'start') {
       startGame('medium');
     } else if (state.screen === 'end') {
-      showScreen('start');
+      goToStart();
     }
   }
 }
@@ -207,6 +302,26 @@ const scoreElement = document.getElementById('score');
 const levelNameElement = document.getElementById('level-name');
 const finalScoreElement = document.getElementById('final-score');
 const endTitleElement = document.getElementById('end-title');
+const nickInput = document.getElementById('nick-input');
+const nickMessage = document.getElementById('nick-message');
+const startLeaderboardElement = document.getElementById('start-leaderboard');
+const endLeaderboardElement = document.getElementById('end-leaderboard');
+const scoreMessageElement = document.getElementById('score-message');
+const saveStatusElement = document.getElementById('save-status');
+const resumeButton = document.getElementById('resume-button');
+const pauseOverlay = document.getElementById('pause-overlay');
+const countdownOverlay = document.getElementById('countdown-overlay');
+const countdownElement = document.getElementById('countdown');
+const guestPanel = document.getElementById('guest-panel');
+const accountPanel = document.getElementById('account-panel');
+const accountNickElement = document.getElementById('account-nick');
+const accountForm = document.getElementById('account-form');
+const accountFormTitle = document.getElementById('account-form-title');
+const loginInput = document.getElementById('login-input');
+const passwordInput = document.getElementById('password-input');
+const accountNote = document.getElementById('account-note');
+const accountMessage = document.getElementById('account-message');
+const accountSubmit = document.getElementById('account-submit');
 
 const cells = [];
 
@@ -248,6 +363,63 @@ function render() {
   levelNameElement.textContent = LEVELS[state.level].name;
 }
 
+function showMessage(element, text) {
+  element.textContent = text;
+  element.classList.remove('hidden');
+}
+
+function hideMessage(element) {
+  element.classList.add('hidden');
+}
+
+function renderLeaderboardNote(listElement, text) {
+  const item = document.createElement('li');
+  item.className = 'leaderboard-note';
+  item.textContent = text;
+  listElement.replaceChildren(item);
+}
+
+function leaderboardCell(className, text) {
+  const cell = document.createElement('span');
+  cell.className = className;
+  cell.textContent = text;
+  return cell;
+}
+
+// Nicki pochodzą od innych graczy — wyłącznie textContent, nigdy innerHTML.
+function renderLeaderboard(listElement, rows, highlightId) {
+  if (rows === null) {
+    renderLeaderboardNote(listElement, 'Ranking niedostępny – brak połączenia');
+    return;
+  }
+  if (rows.length === 0) {
+    renderLeaderboardNote(listElement, 'Brak wyników – zagraj jako pierwszy!');
+    return;
+  }
+  listElement.replaceChildren();
+  rows.forEach(row => {
+    const item = document.createElement('li');
+    item.className = 'leaderboard-row';
+    if (highlightId !== null && row.player_id === highlightId) {
+      item.classList.add('own');
+    }
+    item.appendChild(leaderboardCell('leaderboard-pos', `${row.position}.`));
+    item.appendChild(leaderboardCell('leaderboard-nick', row.has_account ? `${row.nick} ✓` : row.nick));
+    item.appendChild(leaderboardCell('leaderboard-score', row.score));
+    listElement.appendChild(item);
+  });
+}
+
+function updateAccountPanel() {
+  const hasAccount = currentPlayer !== null && currentPlayer.has_account;
+  accountForm.classList.add('hidden');
+  guestPanel.classList.toggle('hidden', hasAccount);
+  accountPanel.classList.toggle('hidden', !hasAccount);
+  if (hasAccount) {
+    accountNickElement.textContent = currentPlayer.nick;
+  }
+}
+
 // =====================================================================
 // 7. PRZEŁĄCZANIE EKRANÓW
 // =====================================================================
@@ -258,25 +430,278 @@ const screens = {
   end: document.getElementById('end-screen'),
 };
 
+// Pauza i odliczanie to nakładki na ekranie rozgrywki.
+const SCREEN_SECTION = { start: 'start', play: 'play', pause: 'play', countdown: 'play', end: 'end' };
+
 function showScreen(name) {
   state.screen = name;
   Object.entries(screens).forEach(([screenName, element]) => {
-    element.classList.toggle('hidden', screenName !== name);
+    element.classList.toggle('hidden', screenName !== SCREEN_SECTION[name]);
   });
+  pauseOverlay.classList.toggle('hidden', name !== 'pause');
+  countdownOverlay.classList.toggle('hidden', name !== 'countdown');
 }
 
 function startGame(level) {
+  // Gracz z kontem gra pod loginem; gracz bez konta — pod wpisanym nickiem.
+  const nick = currentPlayer !== null && currentPlayer.has_account
+    ? currentPlayer.nick
+    : normalizeNick(nickInput.value);
+  if (nick === null) {
+    showMessage(nickMessage, `Wpisz nick (${NICK_MIN}–${NICK_MAX} znaków)`);
+    nickInput.focus();
+    return;
+  }
+  hideMessage(nickMessage);
+  updateResumeButton(null);
+  dbOnline = false;
+  setSaveIndicator('');
   resetState(level);
   render();
   showScreen('play');
   startLoop();
+  startAutosave();
+
+  // Logowanie i usunięcie starego zapisu w tle — gra nie czeka na bazę.
+  enqueueDb(async () => {
+    dbOnline = await ensurePlayer(nick);
+    if (dbOnline) {
+      await deleteSavedGame();
+    } else {
+      setSaveIndicator('○ gra bez rankingu i zapisu');
+    }
+  });
 }
 
 function endGame(isWin) {
   stopLoop();
+  stopAutosave();
   endTitleElement.textContent = isWin ? 'Wygrana!' : 'Koniec gry';
   finalScoreElement.textContent = state.score;
+  hideMessage(scoreMessageElement);
+  renderLeaderboardNote(endLeaderboardElement, 'Ładowanie rankingu…');
   showScreen('end');
+
+  const level = state.level;
+  const score = state.score;
+  enqueueDb(async () => {
+    await deleteSavedGame();
+    const saved = await addScore(level, score);
+    const rows = await getLeaderboard(level);
+    if (!saved) {
+      showMessage(scoreMessageElement, 'Nie udało się zapisać wyniku w rankingu');
+    }
+    renderLeaderboard(endLeaderboardElement, rows, getPlayerId());
+  });
+}
+
+// =====================================================================
+// 8. BAZA W TLE, PAUZA I WZNAWIANIE
+// =====================================================================
+
+let autosaveId = null;
+let autosaveBusy = false;
+let countdownId = null;
+let dbOnline = false;        // czy gracz jest zalogowany i można zapisywać
+let resumeCandidate = null;  // poprawny zapis gotowy do wznowienia
+let currentPlayer = null;      // {id, nick, has_account} z bazy albo null
+let accountMode = 'register';  // 'register' | 'login'
+
+const ACCOUNT_ERRORS = {
+  taken: 'Ten login jest już zajęty',
+  'weak-password': 'Hasło jest za słabe',
+  invalid: 'Nieprawidłowy login lub hasło',
+  offline: 'Brak połączenia z bazą',
+  error: 'Coś poszło nie tak – spróbuj ponownie',
+};
+
+// Operacje na bazie idą po kolei, więc np. zapis gry nie wyprzedzi jej usunięcia.
+function enqueueDb(task) {
+  dbQueue = dbQueue.then(task).catch(() => null);
+  return dbQueue;
+}
+
+function showLeaderboardTab(level) {
+  boardLevel = level;
+  document.querySelectorAll('[data-board-level]').forEach(tab => {
+    tab.classList.toggle('active', tab.dataset.boardLevel === level);
+  });
+  renderLeaderboardNote(startLeaderboardElement, 'Ładowanie rankingu…');
+  getLeaderboard(level).then(rows => {
+    if (boardLevel === level) {
+      renderLeaderboard(startLeaderboardElement, rows, getPlayerId());
+    }
+  });
+}
+
+function refreshStartScreen() {
+  showLeaderboardTab(boardLevel);
+  enqueueDb(async () => {
+    currentPlayer = await getStoredPlayer();
+    updateAccountPanel();
+    if (currentPlayer && !currentPlayer.has_account && nickInput.value.trim() === '') {
+      nickInput.value = currentPlayer.nick;
+    }
+    updateResumeButton(currentPlayer ? await loadSavedGame() : null);
+  });
+}
+
+function goToStart() {
+  showScreen('start');
+  refreshStartScreen();
+}
+
+function setSaveIndicator(text) {
+  saveStatusElement.textContent = text;
+}
+
+// Migawka stanu jest robiona od razu, zapis czeka w kolejce.
+function saveNow() {
+  if (!dbOnline) return Promise.resolve(false);
+  const snapshot = toSavedGame(state);
+  return enqueueDb(() => saveGame(snapshot)).then(ok => {
+    setSaveIndicator(ok ? '● zapisano' : '○ brak zapisu');
+    return ok;
+  });
+}
+
+// Jeśli poprzedni automatyczny zapis jeszcze trwa, kolejny jest pomijany.
+function autosave() {
+  if (autosaveBusy) return;
+  autosaveBusy = true;
+  saveNow().then(() => { autosaveBusy = false; });
+}
+
+function startAutosave() {
+  stopAutosave();
+  autosaveId = setInterval(autosave, AUTOSAVE_INTERVAL);
+}
+
+function stopAutosave() {
+  clearInterval(autosaveId);
+  autosaveId = null;
+}
+
+function startCountdown() {
+  let remaining = COUNTDOWN_FROM;
+  countdownElement.textContent = remaining;
+  showScreen('countdown');
+  stopCountdown();
+  countdownId = setInterval(() => {
+    remaining -= 1;
+    if (remaining > 0) {
+      countdownElement.textContent = remaining;
+      return;
+    }
+    stopCountdown();
+    showScreen('play');
+    startLoop();
+    startAutosave();
+  }, 1000);
+}
+
+function stopCountdown() {
+  clearInterval(countdownId);
+  countdownId = null;
+}
+
+function pauseGame() {
+  if (state.screen !== 'play' && state.screen !== 'countdown') return;
+  stopLoop();
+  stopCountdown();
+  stopAutosave();
+  showScreen('pause');
+  saveNow();
+}
+
+function resumeGame() {
+  if (state.screen !== 'pause') return;
+  startCountdown();
+}
+
+function exitToMenu() {
+  if (state.screen !== 'pause') return;
+  goToStart();
+}
+
+function updateResumeButton(saved) {
+  if (saved && isValidSavedGame(saved)) {
+    resumeCandidate = saved;
+    resumeButton.textContent = `Wznów grę (${LEVELS[saved.level].name}, wynik ${saved.score})`;
+    resumeButton.classList.remove('hidden');
+    return;
+  }
+  resumeCandidate = null;
+  resumeButton.classList.add('hidden');
+  if (saved) {
+    enqueueDb(() => deleteSavedGame()); // uszkodzony zapis — usuwamy
+  }
+}
+
+function resumeSavedGame() {
+  if (state.screen !== 'start' || resumeCandidate === null) return;
+  restoreState(resumeCandidate);
+  updateResumeButton(null);
+  dbOnline = true; // zapis wczytaliśmy, więc sesja gracza działa
+  setSaveIndicator('');
+  render();
+  startCountdown();
+}
+
+function openAccountForm(mode) {
+  accountMode = mode;
+  const isRegister = mode === 'register';
+  accountFormTitle.textContent = isRegister ? 'Załóż konto' : 'Zaloguj';
+  accountSubmit.textContent = isRegister ? 'Załóż konto' : 'Zaloguj';
+  accountNote.textContent = isRegister
+    ? 'Wyniki i zapis gry z tej przeglądarki zostaną przeniesione na konto.'
+    : 'Wyniki gry bez konta z tej przeglądarki nie zostaną przeniesione.';
+  passwordInput.autocomplete = isRegister ? 'new-password' : 'current-password';
+  hideMessage(accountMessage);
+  guestPanel.classList.add('hidden');
+  accountForm.classList.remove('hidden');
+  loginInput.focus();
+}
+
+function closeAccountForm() {
+  passwordInput.value = '';
+  updateAccountPanel();
+}
+
+async function submitAccountForm(event) {
+  event.preventDefault();
+  const login = normalizeLogin(loginInput.value);
+  const password = passwordInput.value;
+  if (login === null) {
+    showMessage(accountMessage, 'Login: 3–16 znaków – litery bez polskich znaków, cyfry, _ lub -');
+    return;
+  }
+  if (password.length < PASSWORD_MIN) {
+    showMessage(accountMessage, `Hasło: co najmniej ${PASSWORD_MIN} znaków`);
+    return;
+  }
+  accountSubmit.disabled = true;
+  const result = await enqueueDb(() => (accountMode === 'register'
+    ? registerAccount(login, password)
+    : signInAccount(login, password)));
+  accountSubmit.disabled = false;
+  if (!result || !result.ok) {
+    showMessage(accountMessage, ACCOUNT_ERRORS[result ? result.reason : 'error']);
+    return;
+  }
+  loginInput.value = '';
+  passwordInput.value = '';
+  refreshStartScreen();
+}
+
+function logout() {
+  enqueueDb(() => signOutAccount()).then(() => {
+    currentPlayer = null;
+    nickInput.value = '';
+    updateResumeButton(null);
+    updateAccountPanel();
+    refreshStartScreen();
+  });
 }
 
 // =====================================================================
@@ -287,8 +712,28 @@ document.querySelectorAll('[data-level]').forEach(button => {
   button.addEventListener('click', () => startGame(button.dataset.level));
 });
 
-document.getElementById('restart-button').addEventListener('click', () => showScreen('start'));
+document.querySelectorAll('[data-board-level]').forEach(tab => {
+  tab.addEventListener('click', () => showLeaderboardTab(tab.dataset.boardLevel));
+});
+
+document.getElementById('restart-button').addEventListener('click', goToStart);
 document.addEventListener('keydown', handleKeydown);
 
+resumeButton.addEventListener('click', resumeSavedGame);
+document.getElementById('pause-resume-button').addEventListener('click', resumeGame);
+document.getElementById('pause-exit-button').addEventListener('click', exitToMenu);
+
+document.getElementById('show-register').addEventListener('click', () => openAccountForm('register'));
+document.getElementById('show-login').addEventListener('click', () => openAccountForm('login'));
+document.getElementById('account-cancel').addEventListener('click', closeAccountForm);
+document.getElementById('logout-button').addEventListener('click', logout);
+accountForm.addEventListener('submit', submitAccountForm);
+
+// Przełączenie karty lub zminimalizowanie okna = pauza z zapisem.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) pauseGame();
+});
+
+initDb();
 createBoard();
-showScreen('start');
+goToStart();
