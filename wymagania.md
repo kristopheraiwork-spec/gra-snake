@@ -1,4 +1,4 @@
-# Wymagania — gra "Wąż" (Snake)
+# Wymagania — gra "Wężoidy" (Snake)
 
 **Data:** 2026-09-29
 **Technologia:** HTML + CSS + JavaScript (bez frameworków i bibliotek)
@@ -101,7 +101,7 @@ Gra ma trzy stany, przełączane w obrębie jednej strony (bez przeładowania):
 
 ### 6.1 Ekran startowy
 - Ilustracja węża z jabłkiem nad tytułem (SVG wbudowane w HTML)
-- Tytuł gry
+- Tytuł gry: **Wężoidy**
 - Trzy przyciski poziomu trudności: **Łatwy / Średni / Trudny**
 - Krótka informacja o sterowaniu (jedna linia)
 - Kliknięcie poziomu rozpoczyna grę natychmiast

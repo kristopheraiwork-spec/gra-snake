@@ -1,4 +1,4 @@
-# Prompt — ilustracja ekranu startowego gry "Wąż"
+# Prompt — ilustracja ekranu startowego gry "Wężoidy"
 
 **Przeznaczenie:** ilustracja nad tytułem na ekranie startowym (punkt 6.1 wymagań)
 **Styl:** płaski minimalizm, paleta gry z `style.css`
