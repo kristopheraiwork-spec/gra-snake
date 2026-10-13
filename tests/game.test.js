@@ -103,6 +103,14 @@ test('isValidSavedGame: odrzuca uszkodzone i zmanipulowane zapisy', () => {
   }
 });
 
+test('isFruitAhead: jabłko na polu tuż przed głową, także za krawędzią', () => {
+  const snake = [{ x: 19, y: 5 }, { x: 18, y: 5 }, { x: 17, y: 5 }];
+  assert.equal(game.isFruitAhead({ snake, direction: 'right', fruit: { x: 0, y: 5 } }), true);
+  assert.equal(game.isFruitAhead({ snake, direction: 'right', fruit: { x: 1, y: 5 } }), false);
+  assert.equal(game.isFruitAhead({ snake, direction: 'up', fruit: { x: 19, y: 4 } }), true);
+  assert.equal(game.isFruitAhead({ snake, direction: 'right', fruit: null }), false);
+});
+
 test('restoreState: odtwarza stan i gra toczy się dalej', () => {
   const saved = validSave({ direction: 'down' });
   game.restoreState(saved);

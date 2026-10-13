@@ -412,3 +412,147 @@ body {
   align-items: center;
   gap: 16px;
 }
+
+/* ---------- Zabawne animacje rozgrywki ---------- */
+
+/* Jabłko wskakuje na planszę jak na sprężynce, potem się kołysze */
+.cell.fruit {
+  animation: fruit-pop 0.4s cubic-bezier(0.3, 1.6, 0.5, 1), fruit-wobble 1.8s ease-in-out 0.4s infinite;
+}
+
+@keyframes fruit-pop {
+  from { transform: scale(0); }
+  to { transform: scale(1); }
+}
+
+@keyframes fruit-wobble {
+  0%, 100% { transform: rotate(-7deg); }
+  50% { transform: rotate(7deg); }
+}
+
+/* Połknięte jabłko wędruje wzdłuż ciała */
+.cell.bulge {
+  border-radius: 50%;
+  transform: scale(1.3);
+}
+
+/* Mruganie */
+.cell.head.blink::before,
+.cell.head.blink::after {
+  transform: scaleY(0.15);
+}
+
+/* Otwarty pyszczek od strony jabłka */
+.cell.head.mouth-open.dir-right { background: radial-gradient(circle at 100% 50%, var(--bg) 0 6px, transparent 6.5px), var(--accent-light); }
+.cell.head.mouth-open.dir-left  { background: radial-gradient(circle at 0% 50%, var(--bg) 0 6px, transparent 6.5px), var(--accent-light); }
+.cell.head.mouth-open.dir-up    { background: radial-gradient(circle at 50% 0%, var(--bg) 0 6px, transparent 6.5px), var(--accent-light); }
+.cell.head.mouth-open.dir-down  { background: radial-gradient(circle at 50% 100%, var(--bg) 0 6px, transparent 6.5px), var(--accent-light); }
+
+/* Język na wolnym polu przed głową */
+.cell.tongue-right { background: linear-gradient(var(--fruit), var(--fruit)) left center / 10px 2px no-repeat, var(--cell-bg); }
+.cell.tongue-left  { background: linear-gradient(var(--fruit), var(--fruit)) right center / 10px 2px no-repeat, var(--cell-bg); }
+.cell.tongue-up    { background: linear-gradient(var(--fruit), var(--fruit)) center bottom / 2px 10px no-repeat, var(--cell-bg); }
+.cell.tongue-down  { background: linear-gradient(var(--fruit), var(--fruit)) center top / 2px 10px no-repeat, var(--cell-bg); }
+
+/* Licznik punktów podskakuje po zjedzeniu */
+.score.bump {
+  animation: score-bump 0.3s ease-out;
+}
+
+@keyframes score-bump {
+  50% { transform: scale(1.35); color: var(--accent); }
+}
+
+/* Warstwa efektów nad planszą */
+.effects {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.fx {
+  position: absolute;
+  transform: translate(-50%, -50%);
+}
+
+.fx-crumb {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--fruit);
+  animation: fx-crumb 0.5s ease-out forwards;
+}
+
+@keyframes fx-crumb {
+  to {
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.6);
+    opacity: 0;
+  }
+}
+
+.fx-plus {
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  text-shadow: 0 0 6px var(--accent), 0 1px 3px rgba(0, 0, 0, 0.7);
+  animation: fx-plus 0.7s ease-out forwards;
+}
+
+@keyframes fx-plus {
+  from { transform: translate(-50%, -50%) scale(0.6); opacity: 1; }
+  to { transform: translate(-50%, -190%) scale(1.15); opacity: 0; }
+}
+
+/* Zderzenie: gwiazdki krążą nad głową, wąż się trzęsie, oczy „× ×” */
+.fx-stars {
+  width: 0;
+  height: 0;
+  animation: fx-orbit 0.9s linear infinite;
+}
+
+.fx-stars span {
+  position: absolute;
+  color: #ffd166;
+  font-size: 15px;
+  text-shadow: 0 0 4px rgba(255, 209, 102, 0.7);
+  line-height: 1;
+  transform: rotate(calc(var(--i) * 120deg)) translateY(-22px) translate(-50%, -50%);
+}
+
+@keyframes fx-orbit {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+.board.crashing .cell.snake,
+.board.crashing .cell.head,
+.board.crashing .cell.tail {
+  animation: crash-shake 0.1s linear infinite;
+}
+
+@keyframes crash-shake {
+  25% { transform: translate(-1px, 1px); }
+  75% { transform: translate(1px, -1px); }
+}
+
+.board.crashing .cell.head::before,
+.board.crashing .cell.head::after {
+  content: "×";
+  background: none;
+  color: var(--bg);
+  font: 700 11px/7px sans-serif;
+  text-align: center;
+}
+
+/* Ograniczony ruch: bez animacji, zostaje sama zmiana wyglądu */
+@media (prefers-reduced-motion: reduce) {
+  .cell.fruit,
+  .score.bump,
+  .board.crashing .cell {
+    animation: none;
+  }
+
+  .fx {
+    display: none;
+  }
+}

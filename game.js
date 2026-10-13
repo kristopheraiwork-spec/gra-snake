@@ -10,6 +10,7 @@ const PASSWORD_MIN = 6;
 const LOGIN_PATTERN = /^[a-z0-9_-]{3,16}$/; // login trafia do adresu e-mail, więc tylko ASCII
 const AUTOSAVE_INTERVAL = 5000; // ms między automatycznymi zapisami gry
 const COUNTDOWN_FROM = 3;       // odliczanie przed wznowieniem gry
+const CRASH_DELAY = 1000;       // ms „ogłuszenia” po zderzeniu, zanim pojawi się ekran końca
 
 const LEVELS = {
   easy:   { name: 'Łatwy',  interval: 200 },
@@ -77,15 +78,23 @@ function gameTick() {
   const result = moveSnake(state);
 
   if (result === 'collision') {
-    endGame(false);
+    crashGame();
     return;
   }
-  if (result === 'win') {
-    render();
-    endGame(true);
-    return;
+
+  advanceSwallows(state.snake.length);
+  if (result === 'ate') {
+    addSwallow();
   }
   render();
+
+  if (result === 'ate') {
+    playEatEffect(cellAt(state.snake[0]));
+    bumpScore(scoreElement);
+  }
+  if (result === 'win') {
+    endGame(true);
+  }
 }
 
 // =====================================================================
@@ -141,6 +150,11 @@ function randomFreeCell(snake) {
     return null;
   }
   return freeCells[Math.floor(Math.random() * freeCells.length)];
+}
+
+// Czy jabłko leży na polu tuż przed głową (wąż otwiera wtedy pyszczek).
+function isFruitAhead(game) {
+  return samePosition(nextHeadPosition(game.snake[0], game.direction), game.fruit);
 }
 
 // Wykonuje jeden ruch. Zwraca: 'moved' | 'ate' | 'collision' | 'win'.
@@ -268,7 +282,8 @@ function handleKeydown(event) {
     return;
   }
 
-  if (state.screen === 'countdown') {
+  // Podczas odliczania i chwili po zderzeniu klawisze nic nie robią.
+  if (state.screen === 'countdown' || state.screen === 'crash') {
     if (KEY_TO_DIRECTION[key] || isConfirmKey) {
       event.preventDefault();
     }
@@ -352,15 +367,40 @@ function render() {
     cellAt(segment).classList.add(segmentClass(index, state.snake.length));
   });
 
+  // Wybrzuszenia po połkniętych jabłkach przesuwają się ku ogonowi.
+  swallowIndexes().forEach(index => {
+    cellAt(state.snake[index]).classList.add('bulge');
+  });
+
   // Klasa kierunku ustawia oczy głowy od strony ruchu.
-  cellAt(state.snake[0]).classList.add('dir-' + state.direction);
+  const headCell = cellAt(state.snake[0]);
+  headCell.classList.add('dir-' + state.direction);
 
   if (state.fruit) {
     cellAt(state.fruit).classList.add('fruit');
   }
 
+  renderFace(headCell);
+
   scoreElement.textContent = state.score;
   levelNameElement.textContent = LEVELS[state.level].name;
+}
+
+// Mimika: pyszczek otwarty przed jabłkiem, czasem język na wolnym polu przed głową, mruganie.
+function renderFace(headCell) {
+  const face = faceState(performance.now());
+  if (face.blink) {
+    headCell.classList.add('blink');
+  }
+  if (isFruitAhead(state)) {
+    headCell.classList.add('mouth-open');
+    return;
+  }
+  const ahead = nextHeadPosition(state.snake[0], state.direction);
+  const aheadIsFree = !state.snake.some(segment => samePosition(segment, ahead));
+  if (face.tongue && aheadIsFree) {
+    cellAt(ahead).classList.add('tongue', 'tongue-' + state.direction);
+  }
 }
 
 function showMessage(element, text) {
@@ -431,7 +471,7 @@ const screens = {
 };
 
 // Pauza i odliczanie to nakładki na ekranie rozgrywki.
-const SCREEN_SECTION = { start: 'start', play: 'play', pause: 'play', countdown: 'play', end: 'end' };
+const SCREEN_SECTION = { start: 'start', play: 'play', pause: 'play', countdown: 'play', crash: 'play', end: 'end' };
 
 function showScreen(name) {
   state.screen = name;
@@ -463,6 +503,8 @@ function startGame(level) {
   dbOnline = false;
   setSaveIndicator('');
   resetState(level);
+  clearEffects(boardElement);
+  resetEffects(performance.now());
   render();
   showScreen('play');
   startLoop();
@@ -479,9 +521,19 @@ function startGame(level) {
   });
 }
 
+// Zderzenie: wąż na chwilę zamiera z oczami „× ×” i gwiazdkami, potem koniec gry.
+function crashGame() {
+  stopLoop();
+  stopAutosave();
+  showScreen('crash');
+  playCrashEffect(cellAt(state.snake[0]), boardElement);
+  setTimeout(() => endGame(false), CRASH_DELAY);
+}
+
 function endGame(isWin) {
   stopLoop();
   stopAutosave();
+  clearEffects(boardElement);
   endTitleElement.textContent = isWin ? 'Wygrana!' : 'Koniec gry';
   finalScoreElement.textContent = state.score;
   hideMessage(scoreMessageElement);
@@ -647,6 +699,8 @@ function updateResumeButton(saved) {
 function resumeSavedGame() {
   if (state.screen !== 'start' || resumeCandidate === null) return;
   restoreState(resumeCandidate);
+  clearEffects(boardElement);
+  resetEffects(performance.now());
   updateResumeButton(null);
   dbOnline = true; // zapis wczytaliśmy, więc sesja gracza działa
   setSaveIndicator('');
