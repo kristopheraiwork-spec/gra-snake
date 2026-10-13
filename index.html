@@ -36,7 +36,8 @@
         <button class="level-button" data-level="medium">Średni</button>
         <button class="level-button" data-level="hard">Trudny</button>
       </div>
-      <p class="hint">Sterowanie: strzałki lub WASD · Enter = start na poziomie Średnim</p>
+      <button id="resume-button" class="level-button resume-button hidden">Wznów grę</button>
+      <p class="hint">Sterowanie: strzałki lub WASD · P / Esc = pauza · Enter = start na poziomie Średnim</p>
       <section class="leaderboard">
         <h2 class="leaderboard-title">Ranking</h2>
         <div class="leaderboard-tabs">
@@ -52,9 +53,21 @@
     <section id="play-screen" class="screen hidden">
       <header class="scoreboard">
         <span id="score" class="score">0</span>
+        <span id="save-status" class="save-status"></span>
         <span id="level-name" class="level-name">Średni</span>
       </header>
-      <div id="board" class="board"></div>
+      <div class="board-wrap">
+        <div id="board" class="board"></div>
+        <div id="pause-overlay" class="overlay hidden">
+          <p class="overlay-title">Pauza</p>
+          <button id="pause-resume-button" class="level-button">Wznów</button>
+          <button id="pause-exit-button" class="level-button">Wyjdź do menu</button>
+        </div>
+        <div id="countdown-overlay" class="overlay hidden">
+          <span id="countdown" class="countdown">3</span>
+        </div>
+      </div>
+      <p class="hint">P / Esc = pauza</p>
     </section>
 
     <!-- Ekran końca gry -->

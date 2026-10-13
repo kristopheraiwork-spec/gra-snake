@@ -316,3 +316,48 @@ body {
   color: var(--muted);
   font-size: 14px;
 }
+
+/* ---------- Pauza, odliczanie, zapis ---------- */
+
+.resume-button {
+  border-color: var(--accent-light);
+}
+
+.save-status {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.board-wrap {
+  position: relative;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  border-radius: 12px;
+  background: rgba(15, 17, 21, 0.78);
+}
+
+.overlay-title {
+  margin: 0;
+  font-size: 40px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.countdown {
+  font-size: 96px;
+  font-weight: 700;
+  color: var(--accent-light);
+}
+
+/* Przyciski na nakładce nie przepuszczają planszy */
+.overlay .level-button {
+  background: var(--bg);
+}

@@ -247,6 +247,7 @@ function changeDirection(newDirection) {
 function handleKeydown(event) {
   const key = event.key.toLowerCase();
   const isConfirmKey = key === 'enter' || key === ' ';
+  const isPauseKey = key === 'p' || key === 'escape';
 
   // Podczas wpisywania nicku litery i spacja trafiają do pola; Enter startuje grę.
   if (event.target === nickInput && key !== 'enter') return;
@@ -258,6 +259,23 @@ function handleKeydown(event) {
     }
     if (direction) {
       changeDirection(direction);
+    } else if (isPauseKey) {
+      pauseGame();
+    }
+    return;
+  }
+
+  if (state.screen === 'countdown') {
+    if (KEY_TO_DIRECTION[key] || isConfirmKey) {
+      event.preventDefault();
+    }
+    return;
+  }
+
+  if (state.screen === 'pause') {
+    if (isConfirmKey || isPauseKey) {
+      event.preventDefault();
+      resumeGame();
     }
     return;
   }
@@ -286,6 +304,11 @@ const nickMessage = document.getElementById('nick-message');
 const startLeaderboardElement = document.getElementById('start-leaderboard');
 const endLeaderboardElement = document.getElementById('end-leaderboard');
 const scoreMessageElement = document.getElementById('score-message');
+const saveStatusElement = document.getElementById('save-status');
+const resumeButton = document.getElementById('resume-button');
+const pauseOverlay = document.getElementById('pause-overlay');
+const countdownOverlay = document.getElementById('countdown-overlay');
+const countdownElement = document.getElementById('countdown');
 
 const cells = [];
 
@@ -384,11 +407,16 @@ const screens = {
   end: document.getElementById('end-screen'),
 };
 
+// Pauza i odliczanie to nakładki na ekranie rozgrywki.
+const SCREEN_SECTION = { start: 'start', play: 'play', pause: 'play', countdown: 'play', end: 'end' };
+
 function showScreen(name) {
   state.screen = name;
   Object.entries(screens).forEach(([screenName, element]) => {
-    element.classList.toggle('hidden', screenName !== name);
+    element.classList.toggle('hidden', screenName !== SCREEN_SECTION[name]);
   });
+  pauseOverlay.classList.toggle('hidden', name !== 'pause');
+  countdownOverlay.classList.toggle('hidden', name !== 'countdown');
 }
 
 function startGame(level) {
@@ -399,21 +427,29 @@ function startGame(level) {
     return;
   }
   hideMessage(nickMessage);
+  updateResumeButton(null);
+  dbOnline = false;
+  setSaveIndicator('');
   resetState(level);
   render();
   showScreen('play');
   startLoop();
+  startAutosave();
 
   // Logowanie i usunięcie starego zapisu w tle — gra nie czeka na bazę.
   enqueueDb(async () => {
-    if (await ensurePlayer(nick)) {
+    dbOnline = await ensurePlayer(nick);
+    if (dbOnline) {
       await deleteSavedGame();
+    } else {
+      setSaveIndicator('○ gra bez rankingu i zapisu');
     }
   });
 }
 
 function endGame(isWin) {
   stopLoop();
+  stopAutosave();
   endTitleElement.textContent = isWin ? 'Wygrana!' : 'Koniec gry';
   finalScoreElement.textContent = state.score;
   hideMessage(scoreMessageElement);
@@ -436,6 +472,12 @@ function endGame(isWin) {
 // =====================================================================
 // 8. BAZA W TLE, PAUZA I WZNAWIANIE
 // =====================================================================
+
+let autosaveId = null;
+let autosaveBusy = false;
+let countdownId = null;
+let dbOnline = false;        // czy gracz jest zalogowany i można zapisywać
+let resumeCandidate = null;  // poprawny zapis gotowy do wznowienia
 
 // Operacje na bazie idą po kolei, więc np. zapis gry nie wyprzedzi jej usunięcia.
 function enqueueDb(task) {
@@ -463,12 +505,110 @@ function refreshStartScreen() {
     if (player && nickInput.value.trim() === '') {
       nickInput.value = player.nick;
     }
+    updateResumeButton(player ? await loadSavedGame() : null);
   });
 }
 
 function goToStart() {
   showScreen('start');
   refreshStartScreen();
+}
+
+function setSaveIndicator(text) {
+  saveStatusElement.textContent = text;
+}
+
+// Migawka stanu jest robiona od razu, zapis czeka w kolejce.
+function saveNow() {
+  if (!dbOnline) return Promise.resolve(false);
+  const snapshot = toSavedGame(state);
+  return enqueueDb(() => saveGame(snapshot)).then(ok => {
+    setSaveIndicator(ok ? '● zapisano' : '○ brak zapisu');
+    return ok;
+  });
+}
+
+// Jeśli poprzedni automatyczny zapis jeszcze trwa, kolejny jest pomijany.
+function autosave() {
+  if (autosaveBusy) return;
+  autosaveBusy = true;
+  saveNow().then(() => { autosaveBusy = false; });
+}
+
+function startAutosave() {
+  stopAutosave();
+  autosaveId = setInterval(autosave, AUTOSAVE_INTERVAL);
+}
+
+function stopAutosave() {
+  clearInterval(autosaveId);
+  autosaveId = null;
+}
+
+function startCountdown() {
+  let remaining = COUNTDOWN_FROM;
+  countdownElement.textContent = remaining;
+  showScreen('countdown');
+  stopCountdown();
+  countdownId = setInterval(() => {
+    remaining -= 1;
+    if (remaining > 0) {
+      countdownElement.textContent = remaining;
+      return;
+    }
+    stopCountdown();
+    showScreen('play');
+    startLoop();
+    startAutosave();
+  }, 1000);
+}
+
+function stopCountdown() {
+  clearInterval(countdownId);
+  countdownId = null;
+}
+
+function pauseGame() {
+  if (state.screen !== 'play' && state.screen !== 'countdown') return;
+  stopLoop();
+  stopCountdown();
+  stopAutosave();
+  showScreen('pause');
+  saveNow();
+}
+
+function resumeGame() {
+  if (state.screen !== 'pause') return;
+  startCountdown();
+}
+
+function exitToMenu() {
+  if (state.screen !== 'pause') return;
+  goToStart();
+}
+
+function updateResumeButton(saved) {
+  if (saved && isValidSavedGame(saved)) {
+    resumeCandidate = saved;
+    resumeButton.textContent = `Wznów grę (${LEVELS[saved.level].name}, wynik ${saved.score})`;
+    resumeButton.classList.remove('hidden');
+    return;
+  }
+  resumeCandidate = null;
+  resumeButton.classList.add('hidden');
+  if (saved) {
+    enqueueDb(() => deleteSavedGame()); // uszkodzony zapis — usuwamy
+  }
+}
+
+function resumeSavedGame() {
+  if (state.screen !== 'start' || resumeCandidate === null) return;
+  restoreState(resumeCandidate);
+  updateResumeButton(null);
+  dbOnline = true; // zapis wczytaliśmy, więc sesja gracza działa
+  setSaveIndicator('');
+  render();
+  startCountdown();
 }
 
 // =====================================================================
@@ -485,6 +625,15 @@ document.querySelectorAll('[data-board-level]').forEach(tab => {
 
 document.getElementById('restart-button').addEventListener('click', goToStart);
 document.addEventListener('keydown', handleKeydown);
+
+resumeButton.addEventListener('click', resumeSavedGame);
+document.getElementById('pause-resume-button').addEventListener('click', resumeGame);
+document.getElementById('pause-exit-button').addEventListener('click', exitToMenu);
+
+// Przełączenie karty lub zminimalizowanie okna = pauza z zapisem.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) pauseGame();
+});
 
 initDb();
 createBoard();
