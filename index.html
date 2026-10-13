@@ -26,12 +26,26 @@
         </g>
       </svg>
       <h1 class="title">Wężoidy</h1>
+      <label class="nick-field">
+        Twój nick
+        <input id="nick-input" class="nick-input" type="text" maxlength="16" autocomplete="off" placeholder="3–16 znaków">
+      </label>
+      <p id="nick-message" class="message hidden"></p>
       <div class="levels">
         <button class="level-button" data-level="easy">Łatwy</button>
         <button class="level-button" data-level="medium">Średni</button>
         <button class="level-button" data-level="hard">Trudny</button>
       </div>
-      <p class="hint">Sterowanie: strzałki lub WASD · Enter / spacja = start na poziomie Średnim</p>
+      <p class="hint">Sterowanie: strzałki lub WASD · Enter = start na poziomie Średnim</p>
+      <section class="leaderboard">
+        <h2 class="leaderboard-title">Ranking</h2>
+        <div class="leaderboard-tabs">
+          <button class="tab-button" data-board-level="easy">Łatwy</button>
+          <button class="tab-button active" data-board-level="medium">Średni</button>
+          <button class="tab-button" data-board-level="hard">Trudny</button>
+        </div>
+        <ol id="start-leaderboard" class="leaderboard-list"></ol>
+      </section>
     </section>
 
     <!-- Rozgrywka -->
@@ -47,6 +61,8 @@
     <section id="end-screen" class="screen hidden">
       <h2 id="end-title" class="title">Koniec gry</h2>
       <p class="final-score">Wynik: <span id="final-score">0</span></p>
+      <p id="score-message" class="message hidden"></p>
+      <ol id="end-leaderboard" class="leaderboard-list"></ol>
       <button id="restart-button" class="level-button">Zagraj ponownie</button>
     </section>
 

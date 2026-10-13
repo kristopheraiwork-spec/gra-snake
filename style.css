@@ -205,3 +205,114 @@ body {
   stroke-width: 1.5;
   stroke-linecap: round;
 }
+
+/* ---------- Nick i komunikaty ---------- */
+
+.nick-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.nick-input {
+  width: 240px;
+  padding: 10px 14px;
+  border: 2px solid #2a2f3a;
+  border-radius: 10px;
+  background: var(--board-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 18px;
+  text-align: center;
+}
+
+.nick-input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.message {
+  margin: 0;
+  color: var(--fruit);
+  font-size: 14px;
+}
+
+/* ---------- Ranking ---------- */
+
+.leaderboard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 320px;
+}
+
+.leaderboard-title {
+  margin: 0;
+  font-size: 20px;
+}
+
+.leaderboard-tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.tab-button {
+  padding: 4px 12px;
+  border: 1px solid #2a2f3a;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.tab-button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.leaderboard-list {
+  width: 320px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.leaderboard-row {
+  display: grid;
+  grid-template-columns: 36px 1fr auto;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+}
+
+.leaderboard-row:nth-child(odd) {
+  background: var(--board-bg);
+}
+
+.leaderboard-row.own {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.leaderboard-pos {
+  color: var(--muted);
+  text-align: right;
+}
+
+.leaderboard-nick {
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.leaderboard-note {
+  padding: 6px;
+  color: var(--muted);
+  font-size: 14px;
+}

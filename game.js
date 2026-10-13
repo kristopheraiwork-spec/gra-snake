@@ -46,6 +46,8 @@ const state = {
 };
 
 let timerId = null;
+let dbQueue = Promise.resolve(); // operacje na bazie wykonywane po kolei
+let boardLevel = 'medium';       // poziom pokazywany w rankingu na ekranie startowym
 
 function resetState(level) {
   state.snake = createInitialSnake();
@@ -246,6 +248,9 @@ function handleKeydown(event) {
   const key = event.key.toLowerCase();
   const isConfirmKey = key === 'enter' || key === ' ';
 
+  // Podczas wpisywania nicku litery i spacja trafiają do pola; Enter startuje grę.
+  if (event.target === nickInput && key !== 'enter') return;
+
   if (state.screen === 'play') {
     const direction = KEY_TO_DIRECTION[key];
     if (direction || isConfirmKey) {
@@ -262,7 +267,7 @@ function handleKeydown(event) {
     if (state.screen === 'start') {
       startGame('medium');
     } else if (state.screen === 'end') {
-      showScreen('start');
+      goToStart();
     }
   }
 }
@@ -276,6 +281,11 @@ const scoreElement = document.getElementById('score');
 const levelNameElement = document.getElementById('level-name');
 const finalScoreElement = document.getElementById('final-score');
 const endTitleElement = document.getElementById('end-title');
+const nickInput = document.getElementById('nick-input');
+const nickMessage = document.getElementById('nick-message');
+const startLeaderboardElement = document.getElementById('start-leaderboard');
+const endLeaderboardElement = document.getElementById('end-leaderboard');
+const scoreMessageElement = document.getElementById('score-message');
 
 const cells = [];
 
@@ -317,6 +327,53 @@ function render() {
   levelNameElement.textContent = LEVELS[state.level].name;
 }
 
+function showMessage(element, text) {
+  element.textContent = text;
+  element.classList.remove('hidden');
+}
+
+function hideMessage(element) {
+  element.classList.add('hidden');
+}
+
+function renderLeaderboardNote(listElement, text) {
+  const item = document.createElement('li');
+  item.className = 'leaderboard-note';
+  item.textContent = text;
+  listElement.replaceChildren(item);
+}
+
+function leaderboardCell(className, text) {
+  const cell = document.createElement('span');
+  cell.className = className;
+  cell.textContent = text;
+  return cell;
+}
+
+// Nicki pochodzą od innych graczy — wyłącznie textContent, nigdy innerHTML.
+function renderLeaderboard(listElement, rows, highlightId) {
+  if (rows === null) {
+    renderLeaderboardNote(listElement, 'Ranking niedostępny – brak połączenia');
+    return;
+  }
+  if (rows.length === 0) {
+    renderLeaderboardNote(listElement, 'Brak wyników – zagraj jako pierwszy!');
+    return;
+  }
+  listElement.replaceChildren();
+  rows.forEach(row => {
+    const item = document.createElement('li');
+    item.className = 'leaderboard-row';
+    if (highlightId !== null && row.player_id === highlightId) {
+      item.classList.add('own');
+    }
+    item.appendChild(leaderboardCell('leaderboard-pos', `${row.position}.`));
+    item.appendChild(leaderboardCell('leaderboard-nick', row.has_account ? `${row.nick} ✓` : row.nick));
+    item.appendChild(leaderboardCell('leaderboard-score', row.score));
+    listElement.appendChild(item);
+  });
+}
+
 // =====================================================================
 // 7. PRZEŁĄCZANIE EKRANÓW
 // =====================================================================
@@ -335,17 +392,83 @@ function showScreen(name) {
 }
 
 function startGame(level) {
+  const nick = normalizeNick(nickInput.value);
+  if (nick === null) {
+    showMessage(nickMessage, `Wpisz nick (${NICK_MIN}–${NICK_MAX} znaków)`);
+    nickInput.focus();
+    return;
+  }
+  hideMessage(nickMessage);
   resetState(level);
   render();
   showScreen('play');
   startLoop();
+
+  // Logowanie i usunięcie starego zapisu w tle — gra nie czeka na bazę.
+  enqueueDb(async () => {
+    if (await ensurePlayer(nick)) {
+      await deleteSavedGame();
+    }
+  });
 }
 
 function endGame(isWin) {
   stopLoop();
   endTitleElement.textContent = isWin ? 'Wygrana!' : 'Koniec gry';
   finalScoreElement.textContent = state.score;
+  hideMessage(scoreMessageElement);
+  renderLeaderboardNote(endLeaderboardElement, 'Ładowanie rankingu…');
   showScreen('end');
+
+  const level = state.level;
+  const score = state.score;
+  enqueueDb(async () => {
+    await deleteSavedGame();
+    const saved = await addScore(level, score);
+    const rows = await getLeaderboard(level);
+    if (!saved) {
+      showMessage(scoreMessageElement, 'Nie udało się zapisać wyniku w rankingu');
+    }
+    renderLeaderboard(endLeaderboardElement, rows, getPlayerId());
+  });
+}
+
+// =====================================================================
+// 8. BAZA W TLE, PAUZA I WZNAWIANIE
+// =====================================================================
+
+// Operacje na bazie idą po kolei, więc np. zapis gry nie wyprzedzi jej usunięcia.
+function enqueueDb(task) {
+  dbQueue = dbQueue.then(task).catch(() => null);
+  return dbQueue;
+}
+
+function showLeaderboardTab(level) {
+  boardLevel = level;
+  document.querySelectorAll('[data-board-level]').forEach(tab => {
+    tab.classList.toggle('active', tab.dataset.boardLevel === level);
+  });
+  renderLeaderboardNote(startLeaderboardElement, 'Ładowanie rankingu…');
+  getLeaderboard(level).then(rows => {
+    if (boardLevel === level) {
+      renderLeaderboard(startLeaderboardElement, rows, getPlayerId());
+    }
+  });
+}
+
+function refreshStartScreen() {
+  showLeaderboardTab(boardLevel);
+  enqueueDb(async () => {
+    const player = await getStoredPlayer();
+    if (player && nickInput.value.trim() === '') {
+      nickInput.value = player.nick;
+    }
+  });
+}
+
+function goToStart() {
+  showScreen('start');
+  refreshStartScreen();
 }
 
 // =====================================================================
@@ -356,8 +479,13 @@ document.querySelectorAll('[data-level]').forEach(button => {
   button.addEventListener('click', () => startGame(button.dataset.level));
 });
 
-document.getElementById('restart-button').addEventListener('click', () => showScreen('start'));
+document.querySelectorAll('[data-board-level]').forEach(tab => {
+  tab.addEventListener('click', () => showLeaderboardTab(tab.dataset.boardLevel));
+});
+
+document.getElementById('restart-button').addEventListener('click', goToStart);
 document.addEventListener('keydown', handleKeydown);
 
+initDb();
 createBoard();
-showScreen('start');
+goToStart();
