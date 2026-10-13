@@ -100,6 +100,7 @@ Ruch węża sterowany jest wyłącznie klawiaturą. Wybór konkretnego poziomu t
 Gra ma trzy stany, przełączane w obrębie jednej strony (bez przeładowania):
 
 ### 6.1 Ekran startowy
+- Ilustracja węża z jabłkiem nad tytułem (SVG wbudowane w HTML)
 - Tytuł gry
 - Trzy przyciski poziomu trudności: **Łatwy / Średni / Trudny**
 - Krótka informacja o sterowaniu (jedna linia)
@@ -123,10 +124,11 @@ Styl: **nowoczesny minimalizm**.
 
 - Ciemne tło strony, plansza wyraźnie odcięta od tła
 - Jeden kolor akcentu dla węża, kontrastowy kolor dla owocu
-- Głowa węża wizualnie odróżniona od reszty ciała (jaśniejszy odcień lub obramowanie)
-- Segmenty węża lekko zaokrąglone
+- Owoc rysowany jako płaskie jabłko (korpus w kolorze owocu, listek w kolorze akcentu)
+- Głowa węża wizualnie odróżniona od reszty ciała (jaśniejszy odcień lub obramowanie) i ma dwoje oczu ustawionych od strony kierunku ruchu
+- Segmenty węża lekko zaokrąglone, ostatni segment (ogon) mniejszy — wąż zwęża się ku końcowi
 - Czytelna typografia bezszeryfowa, wynik jako największy element tekstowy
-- Brak obrazków i zewnętrznych czcionek — wszystko z CSS, żeby gra działała offline
+- Grafika jako SVG wbudowane w CSS/HTML; brak plików graficznych i zewnętrznych czcionek, żeby gra działała offline
 
 ---
 
