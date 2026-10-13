@@ -224,12 +224,21 @@ function cellAt(position) {
   return cells[position.y * BOARD_SIZE + position.x];
 }
 
+function segmentClass(index, length) {
+  if (index === 0) return 'head';
+  if (index === length - 1) return 'tail';
+  return 'snake';
+}
+
 function render() {
   cells.forEach(cell => { cell.className = 'cell'; });
 
   state.snake.forEach((segment, index) => {
-    cellAt(segment).classList.add(index === 0 ? 'head' : 'snake');
+    cellAt(segment).classList.add(segmentClass(index, state.snake.length));
   });
+
+  // Klasa kierunku ustawia oczy głowy od strony ruchu.
+  cellAt(state.snake[0]).classList.add('dir-' + state.direction);
 
   if (state.fruit) {
     cellAt(state.fruit).classList.add('fruit');
