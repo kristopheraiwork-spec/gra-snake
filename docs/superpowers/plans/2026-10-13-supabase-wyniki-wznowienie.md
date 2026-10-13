@@ -1,10 +1,10 @@
-# Ranking i wznawianie gry (Supabase) — plan implementacji
+# Ranking, wznawianie gry i opcjonalne konta (Supabase) — plan implementacji
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Gra „Wężoidy” zapisuje wyniki do wspólnego rankingu (top 10 na poziom) i pozwala wznowić przerwaną rozgrywkę — dane w Supabase.
+**Goal:** Gra „Wężoidy” zapisuje wyniki do wspólnego rankingu (top 10 na poziom), pozwala wznowić przerwaną rozgrywkę i założyć opcjonalne konto (login + hasło) — dane w Supabase.
 
-**Architecture:** Nowy plik `db.js` zamyka całą komunikację z Supabase w funkcjach, które nigdy nie rzucają wyjątków (zwracają wynik albo `null`/`false`). `game.js` dostaje czyste funkcje zapisu stanu (testowane w Node), a operacje bazodanowe wykonuje w tle przez jedną kolejkę (`enqueueDb`), żeby zapisy i usunięcia nie wyprzedzały się nawzajem. Pauza i odliczanie to nakładki na planszę w ekranie rozgrywki.
+**Architecture:** Nowy plik `db.js` zamyka całą komunikację z Supabase w funkcjach, które nigdy nie rzucają wyjątków (zwracają wynik albo `null`/`false`/`{ok:false}`). `game.js` dostaje czyste funkcje zapisu stanu i walidacji loginu (testowane w Node), a operacje bazodanowe wykonuje w tle przez jedną kolejkę (`enqueueDb`), żeby zapisy i usunięcia nie wyprzedzały się nawzajem. Pauza i odliczanie to nakładki na planszę w ekranie rozgrywki. Konta to adresy techniczne `<login>@wezoidy.local`; flagę konta (`has_account`) ustawia wyłącznie wyzwalacz w bazie.
 
 **Tech Stack:** HTML + CSS + JavaScript (ES6+, bez modułów), `supabase-js@2` z cdn.jsdelivr.net, Supabase (Postgres + RLS + anonimowe logowanie), testy: `node:test` (Node 22) + headless Chrome.
 
@@ -13,7 +13,8 @@
 ## Global Constraints
 
 - Projekt Supabase: `https://geudeqgbhjrlnuzantvh.supabase.co`; klucz publiczny: `sb_publishable_AQdcMJa_MDniVulQEN1ShQ_jrp3mKHD` (nigdy `secret` / `service_role`).
-- Baza jest już wgrana (`supabase/schema.sql`) i przetestowana (28/28); logowanie anonimowe włączone. **Nie zmieniać schematu.**
+- Baza jest już wgrana (`supabase/schema.sql`) i przetestowana (28/28); logowanie anonimowe włączone; „Confirm email” wyłączone. Schemat zmienia wyłącznie migracja `supabase/konta.sql` z Task 2 (uruchamia ją użytkownik w SQL Editor).
+- Konta: login 3–16 znaków `[a-zA-Z0-9_-]`, zapisywany małymi literami; adres techniczny `<login>@wezoidy.local`; hasło min. 6 znaków (`PASSWORD_MIN = 6`); nick konta = login, w rankingu z sufiksem ` ✓`.
 - Biblioteka: `<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>`; jedyna zależność zewnętrzna. Bez `package.json`, bez modułów ES (gra musi działać z `file://`).
 - Nick: 3–16 znaków po przycięciu spacji; nicki mogą się powtarzać.
 - Poziomy: `easy` / `medium` / `hard`; kierunki: `up` / `down` / `left` / `right`; plansza 20 × 20; wynik 0–397; w zapisie gry `score = snake.length - 3`.
@@ -26,11 +27,12 @@
 
 ## Review Focus
 
-1. **Wyścig autozapisu z końcem gry** — zapis wysłany tuż przed kolizją kończy się po usunięciu zapisu i „wskrzesza” grę do wznowienia. Oczekiwane: po końcu gry zapisu nie ma (kolejka `enqueueDb`; test e2e w Zadaniu 4: `saveAfterEnd=null`).
-2. **Nick z HTML od innego gracza** (np. `<b>x</b>`, `<img onerror=…>`) w rankingu — oczekiwane: wyświetlony dosłownie jako tekst (test e2e w Zadaniu 3: `xss=true`).
-3. **Wpisywanie nicku zawierającego w/a/s/d/p/spację** — oczekiwane: znaki trafiają do pola, gra nie startuje ani nie reaguje; tylko Enter startuje (test e2e w Zadaniu 3: `typingScreen=start`).
+1. **Wyścig autozapisu z końcem gry** — zapis wysłany tuż przed kolizją kończy się po usunięciu zapisu i „wskrzesza” grę do wznowienia. Oczekiwane: po końcu gry zapisu nie ma (kolejka `enqueueDb`; test e2e w Zadaniu 5: `saveAfterEnd=null`).
+2. **Nick z HTML od innego gracza** (np. `<b>x</b>`, `<img onerror=…>`) w rankingu — oczekiwane: wyświetlony dosłownie jako tekst (test e2e w Zadaniu 4: `xss=true`).
+3. **Wpisywanie nicku zawierającego w/a/s/d/p/spację** — oczekiwane: znaki trafiają do pola, gra nie startuje ani nie reaguje; tylko Enter startuje (test e2e w Zadaniu 4: `typingScreen=start`).
 4. **Zmanipulowany lub uszkodzony zapis gry w bazie** (współrzędne poza planszą, tekst zamiast liczby, owoc na wężu, poziom `toString`) — oczekiwane: brak przycisku „Wznów”, zapis usunięty, gra się nie wiesza (testy `isValidSavedGame` w Zadaniu 1).
-5. **Nick ze spacjami na brzegach / polskimi znakami / długość 16 vs 17** — oczekiwane: spacje przycięte, polskie znaki dozwolone, 17 znaków odrzucone przed wysłaniem do bazy (testy `normalizeNick` w Zadaniu 1).
+5. **Nick i login: spacje na brzegach, polskie znaki, wielkie litery, długość 16 vs 17** — oczekiwane: nick przycięty, polskie znaki w nicku dozwolone; login z polskimi znakami odrzucony z czytelnym komunikatem, wielkie litery zamienione na małe; 17 znaków odrzucone przed wysłaniem do bazy (testy `normalizeNick` i `normalizeLogin` w Zadaniu 1).
+6. **Założenie konta w trakcie gry bez konta** — oczekiwane: dotychczasowe wyniki zostają i od razu mają ✓ w rankingu (test e2e w Zadaniu 6: `ownCheck=true`).
 
 ---
 
@@ -38,7 +40,8 @@
 
 | Plik | Odpowiedzialność |
 |---|---|
-| `db.js` (nowy) | Konfiguracja Supabase i 9 funkcji dostępu do bazy; zero wiedzy o DOM i zasadach gry |
+| `db.js` (nowy) | Konfiguracja Supabase i funkcje dostępu do bazy oraz kont; zero wiedzy o DOM i zasadach gry |
+| `supabase/konta.sql` (nowy) | migracja kont: `has_account`, wyzwalacz, indeks, RLS nicku, widok rankingu |
 | `game.js` | + sekcja 4a (zapis stanu, bez DOM), rozszerzenia sekcji 1, 2, 5, 6, 7, nowa sekcja 8 (baza w tle, pauza, wznawianie) |
 | `index.html` | skrypt CDN, `db.js`, pole nicku, ranking, przycisk „Wznów”, nakładki pauzy i odliczania |
 | `style.css` | style nowych elementów w obecnej palecie |
@@ -66,7 +69,8 @@ Katalog projektu dalej `$P`: `P="/c/VS katalogi/Szkolenia Vibe/dzień 3"`. Chrom
   - `toSavedGame(game): {level, snake: {x,y}[], fruit: {x,y}, direction, score}` — głęboka kopia, bez `pendingDirection`.
   - `isValidSavedGame(saved: any): boolean`.
   - `restoreState(saved): void` — ustawia `state` z zapisu (kopie), `pendingDirection = null`.
-  - Stałe: `NICK_MIN = 3`, `NICK_MAX = 16`, `AUTOSAVE_INTERVAL = 5000`, `COUNTDOWN_FROM = 3`.
+  - `normalizeLogin(raw: any): string | null` — przycięty login małymi literami albo `null`, gdy niezgodny z `LOGIN_PATTERN`.
+  - Stałe: `NICK_MIN = 3`, `NICK_MAX = 16`, `PASSWORD_MIN = 6`, `LOGIN_PATTERN = /^[a-z0-9_-]{3,16}$/`, `AUTOSAVE_INTERVAL = 5000`, `COUNTDOWN_FROM = 3`.
   - Atrapy w `tests/load-game.js` — nazwy funkcji `db.js` używane przez kolejne zadania.
 
 - [ ] **Step 1: Utwórz loader testów `tests/load-game.js`**
@@ -112,13 +116,16 @@ function loadGame() {
     deleteSavedGame: async () => false,
     addScore: async () => false,
     getLeaderboard: async () => null,
+    registerAccount: async () => ({ ok: false, reason: 'offline' }),
+    signInAccount: async () => ({ ok: false, reason: 'offline' }),
+    signOutAccount: async () => false,
   };
   const context = vm.createContext({
     document, console, setInterval, clearInterval, setTimeout, clearTimeout, ...dbStubs,
   });
   const code = fs.readFileSync(path.join(__dirname, '..', 'game.js'), 'utf8');
   vm.runInContext(
-    code + '\n;globalThis.__game = { state, resetState, moveSnake, normalizeNick, toSavedGame, isValidSavedGame, restoreState };',
+    code + '\n;globalThis.__game = { state, resetState, moveSnake, normalizeNick, normalizeLogin, toSavedGame, isValidSavedGame, restoreState };',
     context,
   );
   return context.__game;
@@ -162,6 +169,19 @@ test('normalizeNick: przycina spacje i sprawdza długość 3–16', () => {
   assert.equal(game.normalizeNick('a'.repeat(17)), null);
   assert.equal(game.normalizeNick(''), null);
   assert.equal(game.normalizeNick(undefined), null);
+});
+
+test('normalizeLogin: litery bez polskich znaków, cyfry, _ i -, małe litery', () => {
+  assert.equal(game.normalizeLogin('ola'), 'ola');
+  assert.equal(game.normalizeLogin('  Ola_K-1  '), 'ola_k-1');
+  assert.equal(game.normalizeLogin('a'.repeat(16)), 'a'.repeat(16));
+  assert.equal(game.normalizeLogin('ab'), null);
+  assert.equal(game.normalizeLogin('a'.repeat(17)), null);
+  assert.equal(game.normalizeLogin('żółw'), null);
+  assert.equal(game.normalizeLogin('ola k'), null);
+  assert.equal(game.normalizeLogin('ola@x'), null);
+  assert.equal(game.normalizeLogin(''), null);
+  assert.equal(game.normalizeLogin(null), null);
 });
 
 test('toSavedGame: kopiuje stan gry bez pendingDirection', () => {
@@ -250,6 +270,8 @@ Expected: FAIL — `ReferenceError: normalizeNick is not defined` (eksport w loa
 ```js
 const NICK_MIN = 3;
 const NICK_MAX = 16;
+const PASSWORD_MIN = 6;
+const LOGIN_PATTERN = /^[a-z0-9_-]{3,16}$/; // login trafia do adresu e-mail, więc tylko ASCII
 const AUTOSAVE_INTERVAL = 5000; // ms między automatycznymi zapisami gry
 const COUNTDOWN_FROM = 3;       // odliczanie przed wznowieniem gry
 ```
@@ -266,6 +288,13 @@ function normalizeNick(raw) {
   if (typeof raw !== 'string') return null;
   const nick = raw.trim();
   return nick.length >= NICK_MIN && nick.length <= NICK_MAX ? nick : null;
+}
+
+// Login konta małymi literami albo null, gdy zawiera niedozwolone znaki.
+function normalizeLogin(raw) {
+  if (typeof raw !== 'string') return null;
+  const login = raw.trim().toLowerCase();
+  return LOGIN_PATTERN.test(login) ? login : null;
 }
 
 // Kopia stanu gry w formacie tabeli saved_games.
@@ -317,22 +346,160 @@ function restoreState(saved) {
 - [ ] **Step 6: Uruchom testy — mają przejść**
 
 Run: `cd "$P" && node --test "tests/*.test.js"`
-Expected: PASS — 6 testów, 0 fail.
+Expected: PASS — 7 testów, 0 fail.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-cd "$P" && git add game.js tests/ && git commit -m "Funkcje zapisu stanu gry (nick, zapis, walidacja, odtworzenie) z testami
+cd "$P" && git add game.js tests/ && git commit -m "Funkcje zapisu stanu gry (nick, login, zapis, walidacja, odtworzenie) z testami
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
 ---
 
-### Task 2: Warstwa bazy `db.js` + podpięcie biblioteki
+### Task 2: Migracja kont w bazie + rozszerzony test RLS
 
 **Files:**
-- Create: `db.js`, `supabase/test-rls.mjs` (kopia `$S/rls-test.mjs`)
+- Create: `supabase/konta.sql`, `supabase/test-rls.mjs` (kopia `$S/rls-test.mjs` + przypadki kont)
+
+**Interfaces:**
+- Consumes: istniejący schemat (`schema.sql`), konto testowe `test-konto` założone w teście wstępnym.
+- Produces: kolumna `players.has_account`, kolumna `leaderboard.has_account`, wyzwalacz `on_auth_user_account`; klient nadal ma uprawnienia tylko do `players(id, nick)`.
+
+- [ ] **Step 1: Utwórz `supabase/test-rls.mjs` z przypadkami kont**
+
+Skopiuj `$S/rls-test.mjs` do `supabase/test-rls.mjs`, a przed ostatnią linią (`console.log(\`\nWYNIK: ...`) wstaw:
+
+```js
+// --- konta (migracja konta.sql) ---
+const login = 'test-rls-' + Math.random().toString(36).slice(2, 7);
+const C = await signIn();
+r = await rest('players', { method: 'POST', token: C.token, body: { nick: 'test-c', has_account: true } });
+check('C: nie ustawi has_account przy dodaniu', !ok2xx(r), JSON.stringify(r));
+r = await rest('players', { method: 'POST', token: C.token, body: { nick: 'test-c' } });
+check('C: utworzenie gracza bez konta', ok2xx(r), JSON.stringify(r));
+r = await rest('players?id=eq.' + C.id, { method: 'PATCH', token: C.token, body: { has_account: true } });
+check('C: nie ustawi has_account zmianą', !ok2xx(r), JSON.stringify(r));
+r = await rest('scores', { method: 'POST', token: C.token, body: { level: 'hard', score: 0 } });
+check('C: wynik przed założeniem konta', ok2xx(r), JSON.stringify(r));
+const conv = await fetch(URL + '/auth/v1/user', {
+  method: 'PUT',
+  headers: { apikey: KEY, 'Content-Type': 'application/json', Authorization: 'Bearer ' + C.token },
+  body: JSON.stringify({ email: login + '@wezoidy.local', password: 'Haslo-' + login }),
+});
+check('C: zamiana sesji w konto', conv.status === 200, String(conv.status));
+r = await rest('players?select=nick,has_account&id=eq.' + C.id, { token: C.token });
+check('wyzwalacz: has_account=true i nick=login', Array.isArray(r.data) && r.data[0]?.has_account === true && r.data[0]?.nick === login, JSON.stringify(r));
+r = await rest('players?id=eq.' + C.id, { method: 'PATCH', token: C.token, prefer: 'return=representation', body: { nick: 'inny-nick' } });
+check('konto: nie zmieni nicku', Array.isArray(r.data) && r.data.length === 0, JSON.stringify(r));
+r = await rest('leaderboard?select=nick,has_account&level=eq.hard&player_id=eq.' + C.id);
+check('ranking: konto z has_account=true', Array.isArray(r.data) && r.data[0]?.has_account === true && r.data[0]?.nick === login, JSON.stringify(r));
+r = await rest('players', { method: 'POST', token: (await signIn()).token, body: { nick: login } });
+check('gracz bez konta może mieć nick konta', ok2xx(r), JSON.stringify(r));
+```
+
+- [ ] **Step 2: Uruchom test — część kont ma nie przejść**
+
+Run: `cd "$P" && node supabase/test-rls.mjs`
+Expected: 28 dotychczasowych PASS; FAIL m.in. `wyzwalacz: has_account=true i nick=login` i `ranking: konto z has_account=true` (kolumna i wyzwalacz nie istnieją).
+
+- [ ] **Step 3: Utwórz `supabase/konta.sql`**
+
+```sql
+-- =====================================================================
+-- Wężoidy — migracja: opcjonalne konta (login + hasło)
+-- Uruchomić po schema.sql. Projekt: spec, sekcja 8.
+-- =====================================================================
+
+-- Flagę konta ustawia wyłącznie wyzwalacz poniżej; klient nie ma do niej uprawnień.
+alter table public.players add column has_account boolean not null default false;
+
+-- Nick unikalny tylko wśród kont — gracz bez konta może mieć taki sam.
+create unique index players_account_nick_idx on public.players (lower(nick)) where has_account;
+
+-- Konto = użytkownik nieanonimowy z adresem <login>@wezoidy.local; nick = login.
+create function public.sync_account_player()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if new.is_anonymous or new.email is null or new.email not like '%@wezoidy.local' then
+    return new;
+  end if;
+  insert into public.players (id, nick, has_account)
+  values (new.id, split_part(new.email, '@', 1), true)
+  on conflict (id) do update set nick = excluded.nick, has_account = true;
+  return new;
+end;
+$$;
+
+create trigger on_auth_user_account
+  after insert or update of email, is_anonymous on auth.users
+  for each row execute function public.sync_account_player();
+
+-- Konta założone przed migracją (np. test-konto).
+update public.players p
+set nick = split_part(u.email, '@', 1), has_account = true
+from auth.users u
+where u.id = p.id and not u.is_anonymous and u.email like '%@wezoidy.local';
+
+-- Nick może zmienić tylko gracz bez konta (konto nie podszyje się pod inną nazwę).
+drop policy "players: zmiana własnego nicku" on public.players;
+
+create policy "players: zmiana własnego nicku (bez konta)"
+  on public.players for update
+  to authenticated
+  using (id = (select auth.uid()) and not has_account)
+  with check (id = (select auth.uid()) and not has_account);
+
+-- Ranking z informacją o koncie (nowa kolumna na końcu).
+create or replace view public.leaderboard
+with (security_invoker = true) as
+with best as (
+  select distinct on (s.level, s.player_id)
+    s.level, s.player_id, s.score, s.created_at
+  from public.scores s
+  order by s.level, s.player_id, s.score desc, s.created_at asc
+),
+ranked as (
+  select
+    b.*,
+    row_number() over (partition by b.level order by b.score desc, b.created_at asc) as position
+  from best b
+)
+select r.level, r.position, p.nick, r.score, r.created_at, r.player_id, p.has_account
+from ranked r
+join public.players p on p.id = r.player_id
+where r.position <= 10;
+```
+
+- [ ] **Step 4: Użytkownik uruchamia migrację**
+
+Poproś użytkownika: SQL Editor → wklej całą zawartość `supabase/konta.sql` → Run; oczekiwane „Success. No rows returned”. Poczekaj na potwierdzenie.
+
+- [ ] **Step 5: Uruchom test — ma przejść**
+
+Run: `cd "$P" && node supabase/test-rls.mjs | tail -12`
+Expected: `WYNIK: 38 PASS, 0 FAIL`.
+(Jeśli `ranking: konto z has_account=true` nie przejdzie, bo na poziomie Trudnym jest już 10 lepszych graczy — zmień w teście wynik C na wyższy, np. 300, i uruchom ponownie.)
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd "$P" && git add supabase/konta.sql supabase/test-rls.mjs && git commit -m "Migracja kont (login + hasło) i test reguł RLS
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+---
+
+### Task 3: Warstwa bazy `db.js` + podpięcie biblioteki
+
+**Files:**
+- Create: `db.js`
 - Modify: `index.html` — przed `<script src="game.js"></script>`
 - Pomocnicze (bez commita): `$S/make-harness.mjs`, `$S/smoke.js`
 
@@ -341,13 +508,16 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Produces (globalne funkcje, żadna nie rzuca wyjątku):
   - `initDb(): boolean`
   - `getPlayerId(): string | null`
-  - `getStoredPlayer(): Promise<{id, nick} | null>` — ustawia `playerId`, gdy gracz istnieje.
-  - `ensurePlayer(nick: string): Promise<boolean>` — loguje anonimowo w razie potrzeby, tworzy/aktualizuje gracza.
+  - `getStoredPlayer(): Promise<{id, nick, has_account} | null>` — ustawia `playerId`, gdy gracz istnieje.
+  - `ensurePlayer(nick: string): Promise<boolean>` — loguje anonimowo w razie potrzeby, tworzy gracza lub aktualizuje nick (nicku konta nie zmienia).
+  - `registerAccount(login: string, password: string): Promise<{ok: true} | {ok: false, reason: 'taken'|'weak-password'|'offline'|'error'}>` — przy sesji anonimowej zamienia ją w konto.
+  - `signInAccount(login: string, password: string): Promise<{ok: true} | {ok: false, reason: 'invalid'|'offline'|'error'}>`
+  - `signOutAccount(): Promise<boolean>`
   - `saveGame(snapshot): Promise<boolean>` — upsert do `saved_games`.
   - `loadSavedGame(): Promise<{level, snake, fruit, direction, score} | null>`
   - `deleteSavedGame(): Promise<boolean>`
   - `addScore(level: string, score: number): Promise<boolean>`
-  - `getLeaderboard(level: string): Promise<{position, nick, score, player_id}[] | null>` — `null` = brak połączenia.
+  - `getLeaderboard(level: string): Promise<{position, nick, score, player_id, has_account}[] | null>` — `null` = brak połączenia.
 
 - [ ] **Step 1: Utwórz generator stron testowych `$S/make-harness.mjs`**
 
@@ -469,7 +639,7 @@ async function getStoredPlayer() {
     const session = await currentSession();
     if (!session) return null;
     const { data, error } = await dbClient
-      .from('players').select('id, nick').eq('id', session.user.id).maybeSingle();
+      .from('players').select('id, nick, has_account').eq('id', session.user.id).maybeSingle();
     if (error) throw error;
     if (data) playerId = data.id;
     return data;
@@ -491,13 +661,13 @@ async function signInAndSavePlayer(nick) {
   }
   const userId = session.user.id;
   const { data: player, error: readError } = await dbClient
-    .from('players').select('nick').eq('id', userId).maybeSingle();
+    .from('players').select('nick, has_account').eq('id', userId).maybeSingle();
   if (readError) throw readError;
 
   if (player === null) {
     const { error } = await dbClient.from('players').insert({ nick });
     if (error) throw error;
-  } else if (player.nick !== nick) {
+  } else if (!player.has_account && player.nick !== nick) {
     const { error } = await dbClient.from('players').update({ nick }).eq('id', userId);
     if (error) throw error;
   }
@@ -561,10 +731,59 @@ async function addScore(level, score) {
 async function getLeaderboard(level) {
   return safely('odczyt rankingu', null, async () => {
     const { data, error } = await dbClient
-      .from('leaderboard').select('position, nick, score, player_id')
+      .from('leaderboard').select('position, nick, score, player_id, has_account')
       .eq('level', level).order('position');
     if (error) throw error;
     return data;
+  });
+}
+
+// ---------- Konta: login + hasło (adres techniczny, bez maili) ----------
+
+const ACCOUNT_DOMAIN = 'wezoidy.local';
+
+function loginToEmail(login) {
+  return `${login}@${ACCOUNT_DOMAIN}`;
+}
+
+// Zamienia błąd Supabase Auth na powód zrozumiały dla interfejsu.
+function accountErrorReason(error) {
+  if (error.code === 'user_already_exists' || error.code === 'email_exists') return 'taken';
+  if (error.code === 'weak_password') return 'weak-password';
+  if (error.code === 'invalid_credentials') return 'invalid';
+  if (error.name === 'AuthRetryableFetchError' || error.status === 0) return 'offline';
+  return 'error';
+}
+
+// Przy grze bez konta zamienia anonimową sesję w konto — wyniki i zapis gry zostają.
+async function registerAccount(login, password) {
+  return safely('zakładanie konta', { ok: false, reason: 'offline' }, async () => {
+    const session = await currentSession();
+    const credentials = { email: loginToEmail(login), password };
+    const { error } = session && session.user.is_anonymous
+      ? await dbClient.auth.updateUser(credentials)
+      : await dbClient.auth.signUp(credentials);
+    if (error) return { ok: false, reason: accountErrorReason(error) };
+    await getStoredPlayer();
+    return { ok: true };
+  });
+}
+
+async function signInAccount(login, password) {
+  return safely('logowanie', { ok: false, reason: 'offline' }, async () => {
+    const { error } = await dbClient.auth.signInWithPassword({ email: loginToEmail(login), password });
+    if (error) return { ok: false, reason: accountErrorReason(error) };
+    await getStoredPlayer();
+    return { ok: true };
+  });
+}
+
+async function signOutAccount() {
+  return safely('wylogowanie', false, async () => {
+    const { error } = await dbClient.auth.signOut();
+    if (error) throw error;
+    playerId = null;
+    return true;
   });
 }
 ```
@@ -578,28 +797,28 @@ Expected: `init=true;storedBefore=null;ensure=true;hasId=true;save=true;resave=t
 - [ ] **Step 7: Sprawdź, że gra nadal działa i RLS bez zmian**
 
 ```bash
-cd "$P" && node --test "tests/*.test.js" && cp "$S/rls-test.mjs" supabase/test-rls.mjs && node supabase/test-rls.mjs | tail -1
+cd "$P" && node --test "tests/*.test.js" && node supabase/test-rls.mjs | tail -1
 ```
-Expected: testy Node PASS; `WYNIK: 28 PASS, 0 FAIL`.
+Expected: testy Node PASS; `WYNIK: 38 PASS, 0 FAIL`.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-cd "$P" && git add db.js index.html supabase/test-rls.mjs && git commit -m "Warstwa bazy db.js (Supabase) i test reguł RLS
+cd "$P" && git add db.js index.html && git commit -m "Warstwa bazy db.js (Supabase): ranking, zapis gry, konta
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
 ---
 
-### Task 3: Nick i wspólny ranking (ekran startowy i końcowy)
+### Task 4: Nick i wspólny ranking (ekran startowy i końcowy)
 
 **Files:**
 - Modify: `index.html` (ekran startowy, ekran końca gry), `style.css` (na końcu pliku), `game.js` (sekcje 2, 5, 6, 7, nowa 8, inicjalizacja)
 - Pomocnicze (bez commita): `$S/e2e-ranking.js`
 
 **Interfaces:**
-- Consumes: z Task 1 `normalizeNick`, `NICK_MIN`, `NICK_MAX`; z Task 2 `initDb`, `getStoredPlayer`, `ensurePlayer`, `deleteSavedGame`, `addScore`, `getLeaderboard`, `getPlayerId`.
+- Consumes: z Task 1 `normalizeNick`, `NICK_MIN`, `NICK_MAX`; z Task 3 `initDb`, `getStoredPlayer`, `ensurePlayer`, `deleteSavedGame`, `addScore`, `getLeaderboard`, `getPlayerId`.
 - Produces:
   - `enqueueDb(task: () => Promise<any>): Promise<any>` — kolejka operacji bazodanowych, nigdy nie odrzuca.
   - `renderLeaderboard(listElement, rows | null, highlightId): void`, `renderLeaderboardNote(listElement, text): void`
@@ -627,9 +846,13 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   out.push('typingScreen=' + state.screen);
 
   const list = document.createElement('ol');
-  renderLeaderboard(list, [{ position: 1, nick: '<b>x</b>', score: 3, player_id: 'p1' }], 'p1');
+  renderLeaderboard(list, [
+    { position: 1, nick: '<b>x</b>', score: 3, player_id: 'p1', has_account: false },
+    { position: 2, nick: 'ola', score: 2, player_id: 'p2', has_account: true },
+  ], 'p1');
   out.push('xss=' + (list.querySelector('b') === null && list.textContent.includes('<b>x</b>')));
   out.push('ownRow=' + list.firstChild.classList.contains('own'));
+  out.push('check=' + list.children[1].textContent.includes('ola ✓') + ',' + !list.children[0].textContent.includes('✓'));
 
   input.value = '  test-e2e  ';
   typeKey('Enter');
@@ -902,7 +1125,7 @@ function renderLeaderboard(listElement, rows, highlightId) {
       item.classList.add('own');
     }
     item.appendChild(leaderboardCell('leaderboard-pos', `${row.position}.`));
-    item.appendChild(leaderboardCell('leaderboard-nick', row.nick));
+    item.appendChild(leaderboardCell('leaderboard-nick', row.has_account ? `${row.nick} ✓` : row.nick));
     item.appendChild(leaderboardCell('leaderboard-score', row.score));
     listElement.appendChild(item);
   });
@@ -1023,7 +1246,7 @@ goToStart();
 - [ ] **Step 12: Uruchom e2e i testy Node — mają przejść**
 
 Run: komenda z kroku 2, potem `cd "$P" && node --test "tests/*.test.js"`.
-Expected: `startBoard=true;noNickScreen=start;nickMsgVisible=true;typingScreen=start;xss=true;ownRow=true;enterScreen=play level=medium;endRows=<1–10>;ownEnd=1;scoreMsgHidden=true;backOnStart=start hasId=true;errors=0` oraz testy Node PASS.
+Expected: `startBoard=true;noNickScreen=start;nickMsgVisible=true;typingScreen=start;xss=true;ownRow=true;check=true,true;enterScreen=play level=medium;endRows=<1–10>;ownEnd=1;scoreMsgHidden=true;backOnStart=start hasId=true;errors=0` oraz testy Node PASS.
 
 - [ ] **Step 13: Sprawdź wygląd** — zrzut ekranu startowego:
 
@@ -1042,14 +1265,14 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ---
 
-### Task 4: Pauza, automatyczny zapis, odliczanie i wznawianie
+### Task 5: Pauza, automatyczny zapis, odliczanie i wznawianie
 
 **Files:**
 - Modify: `index.html` (przycisk „Wznów”, wskaźnik zapisu, nakładki), `style.css` (na końcu), `game.js` (sekcje 5, 6, 7, 8, inicjalizacja)
 - Pomocnicze (bez commita): `$S/e2e-pause.js`
 
 **Interfaces:**
-- Consumes: z Task 1 `toSavedGame`, `isValidSavedGame`, `restoreState`, `AUTOSAVE_INTERVAL`, `COUNTDOWN_FROM`; z Task 2 `saveGame`, `loadSavedGame`, `deleteSavedGame`; z Task 3 `enqueueDb`, `goToStart`, `refreshStartScreen`.
+- Consumes: z Task 1 `toSavedGame`, `isValidSavedGame`, `restoreState`, `AUTOSAVE_INTERVAL`, `COUNTDOWN_FROM`; z Task 3 `saveGame`, `loadSavedGame`, `deleteSavedGame`; z Task 4 `enqueueDb`, `goToStart`, `refreshStartScreen`.
 - Produces: `pauseGame()`, `resumeGame()`, `exitToMenu()`, `resumeSavedGame()`, `saveNow(): Promise<boolean>`, `autosave()`, `startAutosave()`, `stopAutosave()`, `startCountdown()`, `stopCountdown()`, `updateResumeButton(saved | null)`, `setSaveIndicator(text)`; nowe wartości `state.screen`: `'pause'`, `'countdown'`.
 
 **Uwaga (doprecyzowanie spec §5):** komunikat o nieudanym logowaniu pokazujemy we wskaźniku zapisu na ekranie gry („○ gra bez rankingu i zapisu”), bo w chwili odpowiedzi bazy pole nicku jest już niewidoczne.
@@ -1248,7 +1471,7 @@ function handleKeydown(event) {
 }
 ```
 
-- [ ] **Step 6: Dodaj elementy w sekcji 6 `game.js`** (pod elementami z Task 3)
+- [ ] **Step 6: Dodaj elementy w sekcji 6 `game.js`** (pod elementami z Task 4)
 
 ```js
 const saveStatusElement = document.getElementById('save-status');
@@ -1469,11 +1692,11 @@ document.addEventListener('visibilitychange', () => {
 });
 ```
 
-- [ ] **Step 10: Uruchom e2e, e2e z Task 3 i testy Node — mają przejść**
+- [ ] **Step 10: Uruchom e2e, e2e z Task 4 i testy Node — mają przejść**
 
-Run: komenda z kroku 2; komenda z Task 3 krok 2; `cd "$P" && node --test "tests/*.test.js"`.
+Run: komenda z kroku 2; komenda z Task 4 krok 2; `cd "$P" && node --test "tests/*.test.js"`.
 Expected (pauza): `indicator=● zapisano;pauseScreen=pause;savedValid=true sameSnake=true;resumeVisible=true text=Wznów grę (Łatwy, wynik 0);countdown=countdown restored=true;afterCountdown=play;hiddenPause=pause;resumedByEnter=play;saveAfterEnd=null;resumeHiddenAfterEnd=true;errors=0`
-Expected (ranking): jak w Task 3 krok 12. Testy Node PASS.
+Expected (ranking): jak w Task 4 krok 12. Testy Node PASS.
 
 - [ ] **Step 11: Sprawdź wygląd pauzy i odliczania** — scenariusz `$S/shot-pause.js`:
 
@@ -1498,14 +1721,366 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ---
 
-### Task 5: Tryb bez internetu, aktualizacja wymagań, publikacja
+### Task 6: Konto w interfejsie (rejestracja, logowanie, wylogowanie)
+
+**Files:**
+- Modify: `index.html` (panel gracza na ekranie startowym), `style.css` (na końcu), `game.js` (sekcje 5, 6, 7, 8, inicjalizacja)
+- Pomocnicze (bez commita): `$S/e2e-accounts.js`, `$S/shot-account.js`
+
+**Interfaces:**
+- Consumes: z Task 1 `normalizeLogin`, `PASSWORD_MIN`; z Task 3 `registerAccount`, `signInAccount`, `signOutAccount`, `getStoredPlayer`; z Task 4 `enqueueDb`, `showMessage`, `hideMessage`, `showLeaderboardTab`, `goToStart`; z Task 5 `refreshStartScreen`, `updateResumeButton`.
+- Produces: `currentPlayer: {id, nick, has_account} | null`, `updateAccountPanel()`, `openAccountForm(mode: 'register'|'login')`, `closeAccountForm()`, `submitAccountForm(event)`, `logout()`; elementy `guestPanel`, `accountPanel`, `accountNickElement`, `accountForm`, `loginInput`, `passwordInput`, `accountMessage`.
+
+- [ ] **Step 1: Napisz scenariusz e2e `$S/e2e-accounts.js`**
+
+```js
+(async () => {
+  const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const out = [];
+  const login = 'test-' + Math.random().toString(36).slice(2, 8);
+  const password = 'Haslo-' + login;
+  const message = () => (accountMessage.classList.contains('hidden') ? '' : accountMessage.textContent);
+  const submit = async (mode, loginValue, passwordValue) => {
+    openAccountForm(mode);
+    loginInput.value = loginValue;
+    passwordInput.value = passwordValue;
+    accountForm.requestSubmit();
+    await wait(3000);
+  };
+  await wait(1500);
+
+  // 1. Gra bez konta z wynikiem
+  nickInput.value = 'gosc-' + login.slice(5);
+  startGame('hard');
+  await wait(1500);
+  state.score = 1;
+  endGame(false);
+  await wait(4000);
+  goToStart();
+  await wait(2000);
+
+  // 2. Walidacja formularza
+  await submit('register', 'żółw', password);
+  out.push('badLogin=' + message());
+  await submit('register', login, '123');
+  out.push('shortPass=' + message());
+
+  // 3. Założenie konta z sesji anonimowej (wielkie litery → małe)
+  await submit('register', login.toUpperCase(), password);
+  out.push('accountPanel=' + !accountPanel.classList.contains('hidden') + ' nick=' + accountNickElement.textContent);
+  showLeaderboardTab('hard');
+  await wait(2000);
+  const own = document.querySelector('#start-leaderboard .own');
+  out.push('ownCheck=' + (own !== null && own.textContent.includes(login + ' ✓')));
+
+  // 4. Gra z kontem bez wpisywania nicku
+  nickInput.value = '';
+  startGame('easy');
+  out.push('accountStart=' + state.screen);
+  endGame(false);
+  await wait(4000);
+  goToStart();
+  await wait(2000);
+
+  // 5. Wylogowanie
+  logout();
+  await wait(2000);
+  out.push('loggedOut=' + !guestPanel.classList.contains('hidden') + ',' + accountPanel.classList.contains('hidden'));
+
+  // 6. Złe hasło, zajęty login, poprawne logowanie
+  await submit('login', login, 'zle-haslo');
+  out.push('wrongPass=' + message());
+  await submit('register', login, password);
+  out.push('taken=' + message());
+  closeAccountForm();
+  await submit('login', login, password);
+  out.push('loggedIn=' + !accountPanel.classList.contains('hidden') + ' nick=' + accountNickElement.textContent);
+
+  out.push('errors=' + window.__errors.length + ' ' + window.__errors.join('|'));
+  document.body.dataset.result = out.join(';');
+})();
+```
+
+- [ ] **Step 2: Uruchom e2e — ma nie przejść**
+
+```bash
+cd "$P" && node "$S/make-harness.mjs" . "$S/e2e-accounts.js" "$S/e2e-accounts.html" \
+  && "/c/Program Files/Google/Chrome/Application/chrome.exe" --headless=new --disable-gpu --virtual-time-budget=60000 --dump-dom "file:///$S/e2e-accounts.html" 2>/dev/null | grep -o 'data-result="[^"]*"'
+```
+Expected: brak `data-result` (`openAccountForm is not defined`).
+
+- [ ] **Step 3: Zmiany w `index.html`** — zamień `<label class="nick-field">…</label>` i `<p id="nick-message" …></p>` na:
+
+```html
+      <div id="guest-panel" class="player-panel">
+        <label class="nick-field">
+          Twój nick
+          <input id="nick-input" class="nick-input" type="text" maxlength="16" autocomplete="off" placeholder="3–16 znaków">
+        </label>
+        <p id="nick-message" class="message hidden"></p>
+        <p class="account-links">
+          <button id="show-register" class="link-button" type="button">Załóż konto</button>
+          ·
+          <button id="show-login" class="link-button" type="button">Zaloguj</button>
+        </p>
+      </div>
+      <div id="account-panel" class="player-panel hidden">
+        <p class="account-info">Zalogowano jako <strong id="account-nick"></strong> ✓</p>
+        <button id="logout-button" class="link-button" type="button">Wyloguj</button>
+      </div>
+      <form id="account-form" class="account-form hidden" novalidate>
+        <h2 id="account-form-title" class="account-form-title">Załóż konto</h2>
+        <input id="login-input" class="nick-input" type="text" maxlength="16" autocomplete="username" placeholder="login: litery, cyfry, _ lub -">
+        <input id="password-input" class="nick-input" type="password" autocomplete="new-password" placeholder="hasło (min. 6 znaków)">
+        <p id="account-note" class="hint"></p>
+        <p id="account-message" class="message hidden"></p>
+        <div class="account-actions">
+          <button id="account-submit" class="level-button" type="submit">Załóż konto</button>
+          <button id="account-cancel" class="link-button" type="button">Anuluj</button>
+        </div>
+      </form>
+```
+
+- [ ] **Step 4: Dodaj style na końcu `style.css`**
+
+```css
+/* ---------- Konto ---------- */
+
+.player-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.link-button {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 14px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.account-links,
+.account-info {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.account-info strong {
+  color: var(--accent);
+}
+
+.account-form {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.account-form-title {
+  margin: 0;
+  font-size: 20px;
+}
+
+.account-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+```
+
+- [ ] **Step 5: W `handleKeydown` (sekcja 5 `game.js`) zamień linię z `event.target === nickInput`** na:
+
+```js
+  // W polach tekstowych klawisze należą do pola. Enter w polu nicku startuje grę,
+  // Enter w formularzu konta wysyła formularz (obsługuje to przeglądarka).
+  if (event.target.tagName === 'INPUT' && (event.target !== nickInput || key !== 'enter')) return;
+```
+
+- [ ] **Step 6: Dodaj elementy i panel w sekcji 6 `game.js`** (pod elementami z Task 5)
+
+```js
+const guestPanel = document.getElementById('guest-panel');
+const accountPanel = document.getElementById('account-panel');
+const accountNickElement = document.getElementById('account-nick');
+const accountForm = document.getElementById('account-form');
+const accountFormTitle = document.getElementById('account-form-title');
+const loginInput = document.getElementById('login-input');
+const passwordInput = document.getElementById('password-input');
+const accountNote = document.getElementById('account-note');
+const accountMessage = document.getElementById('account-message');
+const accountSubmit = document.getElementById('account-submit');
+```
+
+Na końcu sekcji 6 dopisz:
+
+```js
+function updateAccountPanel() {
+  const hasAccount = currentPlayer !== null && currentPlayer.has_account;
+  accountForm.classList.add('hidden');
+  guestPanel.classList.toggle('hidden', hasAccount);
+  accountPanel.classList.toggle('hidden', !hasAccount);
+  if (hasAccount) {
+    accountNickElement.textContent = currentPlayer.nick;
+  }
+}
+```
+
+- [ ] **Step 7: W `startGame` (sekcja 7 `game.js`) zamień pierwszą linię** `const nick = normalizeNick(nickInput.value);` na:
+
+```js
+  // Gracz z kontem gra pod loginem; gracz bez konta — pod wpisanym nickiem.
+  const nick = currentPlayer !== null && currentPlayer.has_account
+    ? currentPlayer.nick
+    : normalizeNick(nickInput.value);
+```
+
+- [ ] **Step 8: Rozbuduj sekcję 8 `game.js`**
+
+Do zmiennych na początku sekcji 8 dopisz:
+
+```js
+let currentPlayer = null;      // {id, nick, has_account} z bazy albo null
+let accountMode = 'register';  // 'register' | 'login'
+
+const ACCOUNT_ERRORS = {
+  taken: 'Ten login jest już zajęty',
+  'weak-password': 'Hasło jest za słabe',
+  invalid: 'Nieprawidłowy login lub hasło',
+  offline: 'Brak połączenia z bazą',
+  error: 'Coś poszło nie tak – spróbuj ponownie',
+};
+```
+
+Zastąp `refreshStartScreen`:
+
+```js
+function refreshStartScreen() {
+  showLeaderboardTab(boardLevel);
+  enqueueDb(async () => {
+    currentPlayer = await getStoredPlayer();
+    updateAccountPanel();
+    if (currentPlayer && !currentPlayer.has_account && nickInput.value.trim() === '') {
+      nickInput.value = currentPlayer.nick;
+    }
+    updateResumeButton(currentPlayer ? await loadSavedGame() : null);
+  });
+}
+```
+
+Na końcu sekcji 8 dopisz:
+
+```js
+function openAccountForm(mode) {
+  accountMode = mode;
+  const isRegister = mode === 'register';
+  accountFormTitle.textContent = isRegister ? 'Załóż konto' : 'Zaloguj';
+  accountSubmit.textContent = isRegister ? 'Załóż konto' : 'Zaloguj';
+  accountNote.textContent = isRegister
+    ? 'Wyniki i zapis gry z tej przeglądarki zostaną przeniesione na konto.'
+    : 'Wyniki gry bez konta z tej przeglądarki nie zostaną przeniesione.';
+  passwordInput.autocomplete = isRegister ? 'new-password' : 'current-password';
+  hideMessage(accountMessage);
+  guestPanel.classList.add('hidden');
+  accountForm.classList.remove('hidden');
+  loginInput.focus();
+}
+
+function closeAccountForm() {
+  passwordInput.value = '';
+  updateAccountPanel();
+}
+
+async function submitAccountForm(event) {
+  event.preventDefault();
+  const login = normalizeLogin(loginInput.value);
+  const password = passwordInput.value;
+  if (login === null) {
+    showMessage(accountMessage, 'Login: 3–16 znaków – litery bez polskich znaków, cyfry, _ lub -');
+    return;
+  }
+  if (password.length < PASSWORD_MIN) {
+    showMessage(accountMessage, `Hasło: co najmniej ${PASSWORD_MIN} znaków`);
+    return;
+  }
+  accountSubmit.disabled = true;
+  const result = await enqueueDb(() => (accountMode === 'register'
+    ? registerAccount(login, password)
+    : signInAccount(login, password)));
+  accountSubmit.disabled = false;
+  if (!result || !result.ok) {
+    showMessage(accountMessage, ACCOUNT_ERRORS[result ? result.reason : 'error']);
+    return;
+  }
+  loginInput.value = '';
+  passwordInput.value = '';
+  refreshStartScreen();
+}
+
+function logout() {
+  enqueueDb(() => signOutAccount()).then(() => {
+    currentPlayer = null;
+    nickInput.value = '';
+    updateResumeButton(null);
+    updateAccountPanel();
+    refreshStartScreen();
+  });
+}
+```
+
+- [ ] **Step 9: Dopisz zdarzenia w sekcji INICJALIZACJA** (przed `initDb();`)
+
+```js
+document.getElementById('show-register').addEventListener('click', () => openAccountForm('register'));
+document.getElementById('show-login').addEventListener('click', () => openAccountForm('login'));
+document.getElementById('account-cancel').addEventListener('click', closeAccountForm);
+document.getElementById('logout-button').addEventListener('click', logout);
+accountForm.addEventListener('submit', submitAccountForm);
+```
+
+- [ ] **Step 10: Uruchom wszystkie testy — mają przejść**
+
+Run: komenda z kroku 2; e2e z Task 4 krok 2 i Task 5 krok 2; `cd "$P" && node --test "tests/*.test.js"`.
+Expected (konta): `badLogin=Login: 3–16 znaków – litery bez polskich znaków, cyfry, _ lub -;shortPass=Hasło: co najmniej 6 znaków;accountPanel=true nick=<login>;ownCheck=true;accountStart=play;loggedOut=true,true;wrongPass=Nieprawidłowy login lub hasło;taken=Ten login jest już zajęty;loggedIn=true nick=<login>;errors=0`
+Expected (ranking, pauza): jak wcześniej. Testy Node PASS.
+(Supabase ogranicza liczbę logowań na godzinę — przy błędach `offline`/`error` po wielu uruchomieniach odczekaj kilka minut.)
+
+- [ ] **Step 11: Sprawdź wygląd formularza** — scenariusz `$S/shot-account.js`:
+
+```js
+openAccountForm('register');
+showMessage(accountMessage, 'Ten login jest już zajęty');
+```
+
+```bash
+cd "$P" && node "$S/make-harness.mjs" . "$S/shot-account.js" "$S/shot-account.html" \
+  && "/c/Program Files/Google/Chrome/Application/chrome.exe" --headless=new --disable-gpu --window-size=700,1300 --screenshot="$S/account.png" "file:///$S/shot-account.html" 2>/dev/null
+```
+Obejrzyj `$S/account.png`: formularz w miejscu pola nicku, czytelne pola, komunikat błędu na czerwono, „Anuluj” jako odnośnik.
+
+- [ ] **Step 12: Commit**
+
+```bash
+cd "$P" && git add index.html style.css game.js && git commit -m "Opcjonalne konto: rejestracja, logowanie i wylogowanie na ekranie startowym
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+---
+
+### Task 7: Tryb bez internetu, aktualizacja wymagań, publikacja
 
 **Files:**
 - Modify: `wymagania.md`
 - Pomocnicze (bez commita): `$S/e2e-offline.js`
 
 **Interfaces:**
-- Consumes: całość z Task 1–4.
+- Consumes: całość z Task 1–6.
 - Produces: zaktualizowane wymagania; gałąź `feat/supabase` wypchnięta, PR do `main`.
 
 - [ ] **Step 1: Napisz scenariusz offline `$S/e2e-offline.js`**
@@ -1562,12 +2137,13 @@ c) Sekcja 2, „Wchodzi w zakres” — dopisz na końcu listy:
 ```markdown
 - Pauza z zapisem stanu gry i wznawianie przerwanej rozgrywki
 - Wspólny ranking wyników (top 10 na każdy poziom) — dane w bazie Supabase (usługa w chmurze)
+- Opcjonalne konto gracza (login + hasło), które zachowuje wyniki i zapis gry na innych komputerach
 ```
 
 d) Sekcja 2, tabela „Świadomie POZA zakresem” — usuń wiersze „Zapis najlepszego wyniku (localStorage)” i „Pauza”; zastąp dwa wiersze:
 
 ```markdown
-| Tryb wieloosobowy, konta z hasłem lub mailem | Gracz identyfikuje się nickiem; tożsamość zapewnia anonimowa sesja |
+| Tryb wieloosobowy, logowanie mailem, odzyskiwanie hasła | Konto z loginem i hasłem jest opcjonalne; zapomniane hasło resetuje administrator w panelu Supabase |
 | Własny backend (serwer) | Baza działa jako usługa w chmurze (Supabase), gra łączy się z nią bezpośrednio |
 ```
 
@@ -1581,7 +2157,7 @@ e) Sekcja 5 — zastąp tabelę i akapit pod nią:
 | P lub Esc | Podczas gry: pauza z zapisem. Na ekranie pauzy: wznowienie |
 | Enter lub spacja | Na ekranie startowym: start gry na poziomie **Średnim**. Na ekranie pauzy: wznowienie. Na ekranie końca gry: powrót do ekranu startowego |
 
-Ruch węża sterowany jest wyłącznie klawiaturą. Wybór konkretnego poziomu trudności następuje myszką (kliknięcie przycisku); Enter/spacja to skrót omijający ten wybór. Gdy kursor jest w polu nicku, litery i spacja trafiają do pola — grę startuje wtedy tylko Enter.
+Ruch węża sterowany jest wyłącznie klawiaturą. Wybór konkretnego poziomu trudności następuje myszką (kliknięcie przycisku); Enter/spacja to skrót omijający ten wybór. Gdy kursor jest w polu nicku, litery i spacja trafiają do pola — grę startuje wtedy tylko Enter. W polach formularza konta żaden klawisz nie steruje grą; Enter wysyła formularz.
 ```
 
 f) Sekcja 6 — zastąp zdanie wstępne i podsekcje 6.1–6.3:
@@ -1592,7 +2168,9 @@ Gra ma pięć stanów, przełączanych w obrębie jednej strony (bez przeładowa
 ### 6.1 Ekran startowy
 - Ilustracja węża z jabłkiem nad tytułem (SVG wbudowane w HTML)
 - Tytuł gry: **Wężoidy**
-- Pole „Twój nick” (3–16 znaków, nicki mogą się powtarzać); po powrocie na stronę uzupełnione poprzednim nickiem
+- Gracz bez konta: pole „Twój nick” (3–16 znaków, nicki mogą się powtarzać; po powrocie na stronę uzupełnione poprzednim nickiem) oraz odnośniki **Załóż konto** / **Zaloguj**
+- Formularz konta: login, hasło, informacja o przeniesieniu (rejestracja) lub nieprzenoszeniu (logowanie) wyników gry bez konta, komunikat błędu
+- Gracz z kontem: „Zalogowano jako *login* ✓” i **Wyloguj** — gra startuje bez wpisywania nicku
 - Trzy przyciski poziomu trudności: **Łatwy / Średni / Trudny** — kliknięcie rozpoczyna grę natychmiast (bez poprawnego nicku pojawia się komunikat pod polem)
 - Przycisk **Wznów grę (poziom, wynik)** — tylko gdy istnieje zapis przerwanej gry
 - Krótka informacja o sterowaniu (jedna linia)
@@ -1618,11 +2196,14 @@ Gra ma pięć stanów, przełączanych w obrębie jednej strony (bez przeładowa
 ### 6.5 Odliczanie
 - Przy wznowieniu (z pauzy lub z ekranu startowego) nad planszą pojawia się odliczanie 3‑2‑1, potem wąż rusza
 
-### 6.6 Ranking i zapis gry
+### 6.6 Ranking, zapis gry i konta
 - Każda zakończona gra trafia do rankingu; ranking pokazuje najlepszy wynik każdego gracza, osobno dla każdego poziomu
 - Jeden zapis przerwanej gry na gracza; zapis automatyczny co 5 s oraz przy pauzie
 - Nowa gra i koniec gry usuwają zapis
-- Gracz identyfikowany jest anonimową sesją Supabase zapamiętaną w przeglądarce — wznowienie działa na tym samym komputerze i w tej samej przeglądarce
+- Gracz bez konta identyfikowany jest anonimową sesją Supabase zapamiętaną w przeglądarce — wznowienie działa na tym samym komputerze i w tej samej przeglądarce
+- Konto (opcjonalne): login 3–16 znaków (litery bez polskich znaków, cyfry, `_`, `-`; małe litery), hasło min. 6 znaków; login jest unikalny wśród kont i widnieje w rankingu ze znakiem ✓
+- Założenie konta w trakcie gry bez konta przenosi na konto dotychczasowe wyniki i zapis gry; logowanie na istniejące konto ich nie przenosi
+- Brak odzyskiwania hasła — reset wykonuje administrator w panelu Supabase
 ```
 
 g) Sekcja 8.1 — zastąp blok struktury i zdanie pod nim:
@@ -1634,6 +2215,7 @@ style.css              — cały wygląd
 game.js                — cała logika gry
 db.js                  — komunikacja z bazą Supabase (ranking, zapis gry)
 supabase/schema.sql    — struktura bazy: tabele, widok rankingu, reguły RLS
+supabase/konta.sql     — migracja: opcjonalne konta (login + hasło)
 supabase/test-rls.mjs  — test reguł dostępu na prawdziwym projekcie (node supabase/test-rls.mjs)
 tests/                 — testy funkcji bez DOM (node --test "tests/*.test.js")
 ```
@@ -1676,12 +2258,15 @@ j) Sekcja 9 — zastąp punkty 1, 9 i 12 oraz dopisz 13–19:
 17. Przełączenie karty lub zminimalizowanie okna podczas gry włącza pauzę.
 18. Bez internetu gra działa; ranking pokazuje „Ranking niedostępny – brak połączenia”.
 19. Nowa gra i koniec gry usuwają zapis — przycisk „Wznów” znika.
+20. „Załóż konto” w trakcie gry bez konta tworzy konto z loginem i hasłem; dotychczasowe wyniki zostają i mają w rankingu znak ✓.
+21. Po wylogowaniu i zalogowaniu (także na innym komputerze) gracz widzi swoje wyniki w rankingu i może wznowić zapisaną grę.
+22. Zajęty login, zły login/hasło, za krótkie hasło i login z polskimi znakami dają czytelny komunikat w formularzu.
 ```
 
 - [ ] **Step 4: Pełna weryfikacja przed commitem**
 
-Run (po kolei): `node --test "tests/*.test.js"`; `node supabase/test-rls.mjs | tail -1`; e2e: smoke (Task 2), ranking (Task 3), pauza (Task 4), offline (Task 5).
-Expected: wszystkie zgodne z oczekiwaniami z poprzednich kroków, `errors=0` wszędzie, `WYNIK: 28 PASS, 0 FAIL`.
+Run (po kolei): `node --test "tests/*.test.js"`; `node supabase/test-rls.mjs | tail -1`; e2e: smoke (Task 3), ranking (Task 4), pauza (Task 5), konta (Task 6), offline (Task 7).
+Expected: wszystkie zgodne z oczekiwaniami z poprzednich kroków, `errors=0` wszędzie, `WYNIK: 38 PASS, 0 FAIL`.
 
 - [ ] **Step 5: Commit i publikacja gałęzi**
 
@@ -1703,8 +2288,12 @@ Expected: trzy odpowiedzi `200` (po 1–2 min od merge). Poproś użytkownika o 
 
 - [ ] **Step 7: Sprzątanie danych testowych (wykonuje użytkownik w SQL Editor)**
 
-Przekaż użytkownikowi zapytanie (usuwa graczy testowych wraz z ich wynikami i zapisami — klucze obce mają `on delete cascade`):
+Przekaż użytkownikowi zapytanie (usuwa konta i sesje testowe; gracze, wyniki i zapisy znikają kaskadowo — klucze obce mają `on delete cascade`):
 
 ```sql
-delete from public.players where nick like 'test-%' or nick = 'podglad';
+delete from auth.users
+where id in (
+  select id from public.players
+  where nick like 'test-%' or nick like 'gosc-%' or nick = 'podglad'
+);
 ```

@@ -1,20 +1,20 @@
 # Projekt: wspólny ranking i wznawianie gry (Supabase)
 
 **Data:** 2026-10-13
-**Status:** zatwierdzony w rozmowie, do przeglądu w formie pisemnej
+**Status:** zatwierdzony (wersja 1); rozszerzony o opcjonalne konta (sekcja 8) — do przeglądu
 **Dotyczy:** gra „Wężoidy” (`index.html`, `style.css`, `game.js`), hostowana na GitHub Pages
 
 ---
 
 ## 1. Cel i decyzje
 
-Gra zapisuje wyniki do **wspólnego rankingu** widocznego dla wszystkich uczestników szkolenia oraz pozwala **wznowić przerwaną rozgrywkę**. Obie funkcje korzystają z bazy w chmurze Supabase.
+Gra zapisuje wyniki do **wspólnego rankingu** widocznego dla wszystkich uczestników szkolenia oraz pozwala **wznowić przerwaną rozgrywkę**. Obie funkcje korzystają z bazy w chmurze Supabase. Gracz może grać bez konta albo założyć **opcjonalne konto (login + hasło)**, żeby zachować wyniki i zapis gry na innych komputerach.
 
 | Decyzja | Wybór |
 |---|---|
 | Gdzie są dane | Supabase, projekt `geudeqgbhjrlnuzantvh` — zarówno wyniki, jak i zapis przerwanej gry |
-| Tożsamość gracza | Nick wpisywany przed grą + anonimowa sesja Supabase w tle (bez haseł i maili) |
-| Unikalność nicku | Brak — nicki mogą się powtarzać |
+| Tożsamość gracza | Domyślnie nick + anonimowa sesja Supabase w tle; opcjonalnie konto: login + hasło (sekcja 8) |
+| Unikalność nicku | Gracze bez konta — brak, nicki mogą się powtarzać; konta — login unikalny wśród kont, oznaczony w rankingu znakiem ✓ |
 | Przerwanie gry | Klawisz `P` / `Esc` (pauza z zapisem) + automatyczny zapis co 5 s + automatyczna pauza po ukryciu karty |
 | Zapisy gry | Jeden na gracza; nowa gra usuwa stary zapis; koniec gry usuwa zapis i dodaje wynik |
 | Wznowienie | Przycisk na ekranie startowym, potem odliczanie 3‑2‑1 |
@@ -160,3 +160,65 @@ Zasada: **gra zawsze działa**, baza jest dodatkiem.
 1. Wgranie `supabase/schema.sql` do projektu (konektor Supabase lub SQL Editor).
 2. Ustawienia panelu: logowanie anonimowe, limit logowań; przekazanie klucza publicznego (`publishable` / `anon`, nigdy `service_role` / `secret`).
 3. Kod na gałęzi `feat/supabase` → PR → merge → automatyczna aktualizacja GitHub Pages.
+
+---
+
+## 8. Opcjonalne konta (login + hasło)
+
+Dodane po zatwierdzeniu wersji 1. Założenia techniczne sprawdzone na projekcie 2026-10-13: domena `@wezoidy.local` jest akceptowana, zamiana anonimowej sesji w konto zachowuje ID i wyniki, logowanie hasłem działa, powtórna rejestracja loginu jest odrzucana.
+
+### 8.1 Zasady
+
+| Element | Reguła |
+|---|---|
+| Login | 3–16 znaków: litery bez polskich znaków, cyfry, `_`, `-`; wielkość liter bez znaczenia (zapisywany małymi literami) |
+| Adres techniczny | `<login>@wezoidy.local` — gracz go nie widzi; żadne maile nie są wysyłane |
+| Hasło | min. 6 znaków; brak odzyskiwania — reset wyłącznie przez administratora w panelu Supabase |
+| Nick konta | = login; unikalny wśród kont; w rankingu ze znakiem ✓; nie da się go zmienić |
+| Nick gracza bez konta | jak w wersji 1 — może być taki sam jak login konta |
+
+### 8.2 Przepływy
+
+- **„Załóż konto” przy aktywnej sesji anonimowej** — `auth.updateUser({ email, password })`: ta sama tożsamość, wyniki i zapis gry zostają, nick zmienia się na login.
+- **„Załóż konto” bez sesji** — `auth.signUp({ email, password })`.
+- **„Zaloguj”** — `auth.signInWithPassword`. Postęp gry bez konta z tej przeglądarki nie jest scalany (wyniki zostają w rankingu pod starym nickiem, zapis gry przepada); formularz logowania o tym informuje.
+- **Po zalogowaniu** — zamiast pola nicku: „Zalogowano jako *login* ✓ · Wyloguj”; gra startuje bez wpisywania nicku.
+- **„Wyloguj”** — powrót do gry bez konta; kolejna gra tworzy nową anonimową sesję.
+
+### 8.3 Baza (migracja `supabase/konta.sql`, uruchamiana po `schema.sql`)
+
+- `players.has_account boolean not null default false` — ustawiana **wyłącznie** przez wyzwalacz na `auth.users` (funkcja `security definer`), gdy użytkownik nie jest anonimowy i ma adres `@wezoidy.local`; wyzwalacz ustawia też `nick = login`. Klient nie ma uprawnień do tej kolumny.
+- Unikalny indeks częściowy `lower(nick) where has_account`.
+- Reguła RLS zmiany nicku dopuszcza ją tylko graczom bez konta.
+- Widok `leaderboard` dostaje kolumnę `has_account` (na końcu).
+- Uzupełnienie `has_account` dla kont założonych przed migracją.
+
+### 8.4 Interfejs
+
+- Ekran startowy, gracz bez konta: pole nicku + odnośniki „Załóż konto” / „Zaloguj”.
+- Formularz konta (w miejscu panelu nicku): login, hasło, informacja zależna od trybu, komunikat błędu, „Załóż konto”/„Zaloguj” i „Anuluj”.
+- Gracz z kontem: „Zalogowano jako *login* ✓” i „Wyloguj”.
+- Ranking: nick konta ze znakiem ✓.
+- Klawiatura: w polach loginu i hasła żaden klawisz nie steruje grą; Enter wysyła formularz.
+
+### 8.5 Błędy
+
+| Sytuacja | Komunikat w formularzu |
+|---|---|
+| Login niezgodny z zasadami | „Login: 3–16 znaków – litery bez polskich znaków, cyfry, _ lub -” |
+| Hasło za krótkie | „Hasło: co najmniej 6 znaków” |
+| Login zajęty | „Ten login jest już zajęty” |
+| Złe dane logowania | „Nieprawidłowy login lub hasło” |
+| Hasło odrzucone przez Supabase | „Hasło jest za słabe” |
+| Brak połączenia | „Brak połączenia z bazą” |
+| Inny błąd | „Coś poszło nie tak – spróbuj ponownie” |
+
+### 8.6 Ustawienia panelu
+
+Authentication → Sign In / Providers → Email: włączony, **Confirm email wyłączone** (zrobione 2026-10-13; `mailer_autoconfirm = true`).
+
+### 8.7 Testy
+
+- Node: `normalizeLogin` (dozwolone znaki, długość, zamiana na małe litery, polskie znaki odrzucone).
+- RLS: klient nie ustawi `has_account` (ani przy dodaniu, ani przy zmianie); konto nie zmieni nicku; po zamianie sesji w konto wyzwalacz ustawia `has_account = true` i `nick = login`; ranking zwraca `has_account`.
+- E2E: gra bez konta → wynik → „Załóż konto” → wynik w rankingu z ✓; wylogowanie; logowanie hasłem; zły login/hasło i zajęty login dają właściwe komunikaty.
