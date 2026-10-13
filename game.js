@@ -4,6 +4,12 @@
 
 const BOARD_SIZE = 20;
 const INITIAL_LENGTH = 3;
+const NICK_MIN = 3;
+const NICK_MAX = 16;
+const PASSWORD_MIN = 6;
+const LOGIN_PATTERN = /^[a-z0-9_-]{3,16}$/; // login trafia do adresu e-mail, więc tylko ASCII
+const AUTOSAVE_INTERVAL = 5000; // ms między automatycznymi zapisami gry
+const COUNTDOWN_FROM = 3;       // odliczanie przed wznowieniem gry
 
 const LEVELS = {
   easy:   { name: 'Łatwy',  interval: 200 },
@@ -159,6 +165,69 @@ function moveSnake(game) {
   game.score += 1;
   game.fruit = randomFreeCell(game.snake);
   return game.fruit === null ? 'win' : 'ate';
+}
+
+// =====================================================================
+// 4a. ZAPIS STANU GRY (bez dostępu do DOM)
+// =====================================================================
+
+// Przycięty nick albo null, gdy długość jest poza zakresem.
+function normalizeNick(raw) {
+  if (typeof raw !== 'string') return null;
+  const nick = raw.trim();
+  return nick.length >= NICK_MIN && nick.length <= NICK_MAX ? nick : null;
+}
+
+// Login konta małymi literami albo null, gdy zawiera niedozwolone znaki.
+function normalizeLogin(raw) {
+  if (typeof raw !== 'string') return null;
+  const login = raw.trim().toLowerCase();
+  return LOGIN_PATTERN.test(login) ? login : null;
+}
+
+// Kopia stanu gry w formacie tabeli saved_games.
+function toSavedGame(game) {
+  return {
+    level: game.level,
+    snake: game.snake.map(segment => ({ x: segment.x, y: segment.y })),
+    fruit: { x: game.fruit.x, y: game.fruit.y },
+    direction: game.direction,
+    score: game.score,
+  };
+}
+
+function isValidCell(cell) {
+  return cell !== null && typeof cell === 'object'
+    && Number.isInteger(cell.x) && Number.isInteger(cell.y)
+    && cell.x >= 0 && cell.x < BOARD_SIZE
+    && cell.y >= 0 && cell.y < BOARD_SIZE;
+}
+
+// Zapis z bazy mógł zostać uszkodzony lub zmieniony ręcznie — sprawdzamy wszystko.
+function isValidSavedGame(saved) {
+  if (saved === null || typeof saved !== 'object') return false;
+  if (!Object.hasOwn(LEVELS, saved.level)) return false;
+  if (!Object.hasOwn(DIRECTIONS, saved.direction)) return false;
+
+  const snake = saved.snake;
+  if (!Array.isArray(snake)) return false;
+  if (snake.length < INITIAL_LENGTH || snake.length > BOARD_SIZE * BOARD_SIZE) return false;
+  if (!snake.every(isValidCell)) return false;
+  if (new Set(snake.map(cell => cell.y * BOARD_SIZE + cell.x)).size !== snake.length) return false;
+
+  if (!isValidCell(saved.fruit)) return false;
+  if (snake.some(segment => samePosition(segment, saved.fruit))) return false;
+
+  return saved.score === snake.length - INITIAL_LENGTH;
+}
+
+function restoreState(saved) {
+  state.snake = saved.snake.map(segment => ({ x: segment.x, y: segment.y }));
+  state.fruit = { x: saved.fruit.x, y: saved.fruit.y };
+  state.direction = saved.direction;
+  state.pendingDirection = null;
+  state.score = saved.score;
+  state.level = saved.level;
 }
 
 // =====================================================================
