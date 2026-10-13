@@ -440,6 +440,12 @@ function showScreen(name) {
   });
   pauseOverlay.classList.toggle('hidden', name !== 'pause');
   countdownOverlay.classList.toggle('hidden', name !== 'countdown');
+  // Ilustracja animuje się tylko wtedy, gdy ją widać.
+  if (name === 'start') {
+    startLogoAnimation();
+  } else {
+    stopLogoAnimation();
+  }
 }
 
 function startGame(level) {

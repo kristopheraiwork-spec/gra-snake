@@ -38,7 +38,7 @@ Poniższe zostały rozważone i odrzucone, żeby utrzymać demo proste:
 |---|---|
 | Bonusowe owoce, przeszkody na planszy | Rozbudowuje logikę kolizji ponad potrzebę demo |
 | Sterowanie dotykowe, tryb mobilny | Szkolenie odbywa się na komputerach |
-| Dźwięki, animacje, efekty cząsteczkowe | Nie wpływają na rozgrywkę |
+| Dźwięki, animacje planszy, efekty cząsteczkowe | Nie wpływają na rozgrywkę (animowana jest tylko ilustracja na ekranie startowym) |
 | Tryb wieloosobowy, logowanie mailem, odzyskiwanie hasła | Konto z loginem i hasłem jest opcjonalne; zapomniane hasło resetuje administrator w panelu Supabase |
 | Własny backend (serwer) | Baza działa jako usługa w chmurze (Supabase), gra łączy się z nią bezpośrednio |
 
@@ -102,7 +102,7 @@ Ruch węża sterowany jest wyłącznie klawiaturą. Wybór konkretnego poziomu t
 Gra ma pięć stanów, przełączanych w obrębie jednej strony (bez przeładowania): ekran startowy, rozgrywka, pauza, odliczanie, koniec gry.
 
 ### 6.1 Ekran startowy
-- Ilustracja węża z jabłkiem nad tytułem (SVG wbudowane w HTML)
+- Animowana ilustracja nad tytułem (SVG + `logo.js`): wąż pełznie falą w stronę jabłka, mruga co kilka sekund, jabłko i listek lekko się kołyszą; animacja działa tylko na ekranie startowym i zatrzymuje się przy ustawieniu systemowym „ogranicz ruch”
 - Tytuł gry: **Wężoidy**
 - Gracz bez konta: pole „Twój nick” (3–16 znaków, nicki mogą się powtarzać; po powrocie na stronę uzupełnione poprzednim nickiem) oraz odnośniki **Załóż konto** / **Zaloguj**
 - Formularz konta: login, hasło, informacja o przeniesieniu (rejestracja) lub nieprzenoszeniu (logowanie) wyników gry bez konta, komunikat błędu
@@ -166,6 +166,7 @@ index.html             — struktura strony: ekrany, panel gracza, ranking, nak�
 style.css              — cały wygląd
 game.js                — cała logika gry
 db.js                  — komunikacja z bazą Supabase (ranking, zapis gry, konta)
+logo.js                — animacja ilustracji na ekranie startowym
 supabase/schema.sql    — struktura bazy: tabele, widok rankingu, reguły RLS
 supabase/konta.sql     — migracja: opcjonalne konta (login + hasło)
 supabase/test-rls.mjs  — test reguł dostępu na prawdziwym projekcie (node supabase/test-rls.mjs)
