@@ -249,8 +249,9 @@ function handleKeydown(event) {
   const isConfirmKey = key === 'enter' || key === ' ';
   const isPauseKey = key === 'p' || key === 'escape';
 
-  // Podczas wpisywania nicku litery i spacja trafiają do pola; Enter startuje grę.
-  if (event.target === nickInput && key !== 'enter') return;
+  // W polach tekstowych klawisze należą do pola. Enter w polu nicku startuje grę,
+  // Enter w formularzu konta wysyła formularz (obsługuje to przeglądarka).
+  if (event.target.tagName === 'INPUT' && (event.target !== nickInput || key !== 'enter')) return;
 
   if (state.screen === 'play') {
     const direction = KEY_TO_DIRECTION[key];
@@ -309,6 +310,16 @@ const resumeButton = document.getElementById('resume-button');
 const pauseOverlay = document.getElementById('pause-overlay');
 const countdownOverlay = document.getElementById('countdown-overlay');
 const countdownElement = document.getElementById('countdown');
+const guestPanel = document.getElementById('guest-panel');
+const accountPanel = document.getElementById('account-panel');
+const accountNickElement = document.getElementById('account-nick');
+const accountForm = document.getElementById('account-form');
+const accountFormTitle = document.getElementById('account-form-title');
+const loginInput = document.getElementById('login-input');
+const passwordInput = document.getElementById('password-input');
+const accountNote = document.getElementById('account-note');
+const accountMessage = document.getElementById('account-message');
+const accountSubmit = document.getElementById('account-submit');
 
 const cells = [];
 
@@ -397,6 +408,16 @@ function renderLeaderboard(listElement, rows, highlightId) {
   });
 }
 
+function updateAccountPanel() {
+  const hasAccount = currentPlayer !== null && currentPlayer.has_account;
+  accountForm.classList.add('hidden');
+  guestPanel.classList.toggle('hidden', hasAccount);
+  accountPanel.classList.toggle('hidden', !hasAccount);
+  if (hasAccount) {
+    accountNickElement.textContent = currentPlayer.nick;
+  }
+}
+
 // =====================================================================
 // 7. PRZEŁĄCZANIE EKRANÓW
 // =====================================================================
@@ -420,7 +441,10 @@ function showScreen(name) {
 }
 
 function startGame(level) {
-  const nick = normalizeNick(nickInput.value);
+  // Gracz z kontem gra pod loginem; gracz bez konta — pod wpisanym nickiem.
+  const nick = currentPlayer !== null && currentPlayer.has_account
+    ? currentPlayer.nick
+    : normalizeNick(nickInput.value);
   if (nick === null) {
     showMessage(nickMessage, `Wpisz nick (${NICK_MIN}–${NICK_MAX} znaków)`);
     nickInput.focus();
@@ -478,6 +502,16 @@ let autosaveBusy = false;
 let countdownId = null;
 let dbOnline = false;        // czy gracz jest zalogowany i można zapisywać
 let resumeCandidate = null;  // poprawny zapis gotowy do wznowienia
+let currentPlayer = null;      // {id, nick, has_account} z bazy albo null
+let accountMode = 'register';  // 'register' | 'login'
+
+const ACCOUNT_ERRORS = {
+  taken: 'Ten login jest już zajęty',
+  'weak-password': 'Hasło jest za słabe',
+  invalid: 'Nieprawidłowy login lub hasło',
+  offline: 'Brak połączenia z bazą',
+  error: 'Coś poszło nie tak – spróbuj ponownie',
+};
 
 // Operacje na bazie idą po kolei, więc np. zapis gry nie wyprzedzi jej usunięcia.
 function enqueueDb(task) {
@@ -501,11 +535,12 @@ function showLeaderboardTab(level) {
 function refreshStartScreen() {
   showLeaderboardTab(boardLevel);
   enqueueDb(async () => {
-    const player = await getStoredPlayer();
-    if (player && nickInput.value.trim() === '') {
-      nickInput.value = player.nick;
+    currentPlayer = await getStoredPlayer();
+    updateAccountPanel();
+    if (currentPlayer && !currentPlayer.has_account && nickInput.value.trim() === '') {
+      nickInput.value = currentPlayer.nick;
     }
-    updateResumeButton(player ? await loadSavedGame() : null);
+    updateResumeButton(currentPlayer ? await loadSavedGame() : null);
   });
 }
 
@@ -611,6 +646,62 @@ function resumeSavedGame() {
   startCountdown();
 }
 
+function openAccountForm(mode) {
+  accountMode = mode;
+  const isRegister = mode === 'register';
+  accountFormTitle.textContent = isRegister ? 'Załóż konto' : 'Zaloguj';
+  accountSubmit.textContent = isRegister ? 'Załóż konto' : 'Zaloguj';
+  accountNote.textContent = isRegister
+    ? 'Wyniki i zapis gry z tej przeglądarki zostaną przeniesione na konto.'
+    : 'Wyniki gry bez konta z tej przeglądarki nie zostaną przeniesione.';
+  passwordInput.autocomplete = isRegister ? 'new-password' : 'current-password';
+  hideMessage(accountMessage);
+  guestPanel.classList.add('hidden');
+  accountForm.classList.remove('hidden');
+  loginInput.focus();
+}
+
+function closeAccountForm() {
+  passwordInput.value = '';
+  updateAccountPanel();
+}
+
+async function submitAccountForm(event) {
+  event.preventDefault();
+  const login = normalizeLogin(loginInput.value);
+  const password = passwordInput.value;
+  if (login === null) {
+    showMessage(accountMessage, 'Login: 3–16 znaków – litery bez polskich znaków, cyfry, _ lub -');
+    return;
+  }
+  if (password.length < PASSWORD_MIN) {
+    showMessage(accountMessage, `Hasło: co najmniej ${PASSWORD_MIN} znaków`);
+    return;
+  }
+  accountSubmit.disabled = true;
+  const result = await enqueueDb(() => (accountMode === 'register'
+    ? registerAccount(login, password)
+    : signInAccount(login, password)));
+  accountSubmit.disabled = false;
+  if (!result || !result.ok) {
+    showMessage(accountMessage, ACCOUNT_ERRORS[result ? result.reason : 'error']);
+    return;
+  }
+  loginInput.value = '';
+  passwordInput.value = '';
+  refreshStartScreen();
+}
+
+function logout() {
+  enqueueDb(() => signOutAccount()).then(() => {
+    currentPlayer = null;
+    nickInput.value = '';
+    updateResumeButton(null);
+    updateAccountPanel();
+    refreshStartScreen();
+  });
+}
+
 // =====================================================================
 // INICJALIZACJA
 // =====================================================================
@@ -629,6 +720,12 @@ document.addEventListener('keydown', handleKeydown);
 resumeButton.addEventListener('click', resumeSavedGame);
 document.getElementById('pause-resume-button').addEventListener('click', resumeGame);
 document.getElementById('pause-exit-button').addEventListener('click', exitToMenu);
+
+document.getElementById('show-register').addEventListener('click', () => openAccountForm('register'));
+document.getElementById('show-login').addEventListener('click', () => openAccountForm('login'));
+document.getElementById('account-cancel').addEventListener('click', closeAccountForm);
+document.getElementById('logout-button').addEventListener('click', logout);
+accountForm.addEventListener('submit', submitAccountForm);
 
 // Przełączenie karty lub zminimalizowanie okna = pauza z zapisem.
 document.addEventListener('visibilitychange', () => {

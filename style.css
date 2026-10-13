@@ -361,3 +361,52 @@ body {
 .overlay .level-button {
   background: var(--bg);
 }
+
+/* ---------- Konto ---------- */
+
+.player-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.link-button {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 14px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.account-links,
+.account-info {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.account-info strong {
+  color: var(--accent);
+}
+
+.account-form {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.account-form-title {
+  margin: 0;
+  font-size: 20px;
+}
+
+.account-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
