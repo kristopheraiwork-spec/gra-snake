@@ -44,6 +44,9 @@ function loadGame() {
     // logo.js
     startLogoAnimation: () => {},
     stopLogoAnimation: () => {},
+    // background.js
+    initBackground: () => {},
+    setBackgroundCalm: () => {},
     // effects.js
     resetEffects: () => {},
     addSwallow: () => {},

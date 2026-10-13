@@ -139,7 +139,14 @@ Gra ma pięć stanów, przełączanych w obrębie jednej strony (bez przeładowa
 - **Zabawna kolizja** — po zderzeniu wąż na ok. 1 s zamiera: oczy „× ×”, ciało się trzęsie, nad głową krążą gwiazdki; dopiero potem ekran końca gry (w tej chwili klawisze nie działają)
 - Efekty na polach planszy to klasy CSS; efekty jednorazowe żyją na warstwie nad planszą i same znikają; przy ustawieniu „ogranicz ruch” animacje są wyłączone
 
-### 6.7 Ranking, zapis gry i konta
+### 6.7 Tło ze świetlikami
+- Za całą stroną drobne, rozmyte świetliki w kolorach gry (zielone, co piąty różowy) powoli dryfują i migoczą; liczba zależy od wielkości okna (20–80)
+- Na ekranie startowym i końcowym pełny efekt; podczas rozgrywki, pauzy, odliczania i kolizji płynnie przygasają (ok. ⅓ jasności) i zwalniają
+- Plansza ma własne, nieprzezroczyste tło — świetliki nie pojawiają się między komórkami
+- Rysowane na `<canvas>` (lżejsze niż setki elementów HTML); plansza gry pozostaje siatką elementów HTML
+- Przy ustawieniu „ogranicz ruch” świetliki są nieruchome
+
+### 6.8 Ranking, zapis gry i konta
 - Każda zakończona gra trafia do rankingu; ranking pokazuje najlepszy wynik każdego gracza, osobno dla każdego poziomu
 - Jeden zapis przerwanej gry na gracza; zapis automatyczny co 5 s oraz przy pauzie
 - Nowa gra i koniec gry usuwają zapis
@@ -175,6 +182,7 @@ game.js                — cała logika gry
 db.js                  — komunikacja z bazą Supabase (ranking, zapis gry, konta)
 logo.js                — animacja ilustracji na ekranie startowym
 effects.js             — zabawne animacje rozgrywki (okruszki, „+1”, mimika, kolizja)
+background.js          — animowane tło ze świetlikami (canvas)
 supabase/schema.sql    — struktura bazy: tabele, widok rankingu, reguły RLS
 supabase/konta.sql     — migracja: opcjonalne konta (login + hasło)
 supabase/test-rls.mjs  — test reguł dostępu na prawdziwym projekcie (node supabase/test-rls.mjs)
@@ -242,3 +250,4 @@ Gra jest gotowa, gdy wszystkie poniższe punkty są spełnione:
 22. Zajęty login, zły login/hasło, za krótkie hasło i login z polskimi znakami dają czytelny komunikat w formularzu.
 23. Zjedzenie jabłka pokazuje okruszki i „+1”, licznik podskakuje, a wybrzuszenie przesuwa się wzdłuż węża; wąż otwiera pyszczek przed jabłkiem.
 24. Po zderzeniu wąż przez ok. 1 s ma oczy „× ×” i gwiazdki nad głową, potem pojawia się ekran końca gry; animacje nie spowalniają gry na poziomie Trudnym.
+25. Za stroną dryfują świetliki; podczas rozgrywki przygasają i zwalniają, a po powrocie do menu wracają do pełnej jasności.

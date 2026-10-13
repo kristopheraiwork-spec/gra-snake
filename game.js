@@ -480,6 +480,8 @@ function showScreen(name) {
   });
   pauseOverlay.classList.toggle('hidden', name !== 'pause');
   countdownOverlay.classList.toggle('hidden', name !== 'countdown');
+  // Świetliki w tle przygasają i zwalniają podczas rozgrywki.
+  setBackgroundCalm(SCREEN_SECTION[name] === 'play');
   // Ilustracja animuje się tylko wtedy, gdy ją widać.
   if (name === 'start') {
     startLogoAnimation();
@@ -795,5 +797,6 @@ document.addEventListener('visibilitychange', () => {
 });
 
 initDb();
+initBackground();
 createBoard();
 goToStart();
