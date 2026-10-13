@@ -166,15 +166,12 @@ body {
 /* ---------- Ilustracja ekranu startowego ---------- */
 
 .logo {
-  width: 200px;
-  height: 120px;
+  width: 320px;
+  height: 76px;
 }
 
 .logo-body {
-  fill: none;
-  stroke: var(--accent);
-  stroke-width: 14;
-  stroke-linecap: round;
+  fill: var(--accent);
 }
 
 .logo-head {
@@ -197,6 +194,11 @@ body {
 
 .logo-leaf {
   fill: var(--accent);
+}
+
+.logo-shine {
+  fill: #fff;
+  opacity: 0.8;
 }
 
 .logo-stem {

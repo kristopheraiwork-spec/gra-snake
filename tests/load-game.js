@@ -41,6 +41,9 @@ function loadGame() {
     registerAccount: async () => ({ ok: false, reason: 'offline' }),
     signInAccount: async () => ({ ok: false, reason: 'offline' }),
     signOutAccount: async () => false,
+    // logo.js
+    startLogoAnimation: () => {},
+    stopLogoAnimation: () => {},
   };
   const context = vm.createContext({
     document, console, setInterval, clearInterval, setTimeout, clearTimeout, ...dbStubs,
